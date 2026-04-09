@@ -1,0 +1,21 @@
+# Dependencias (cuando agregues npm para Supabase)
+node_modules/
+
+# Variables de entorno — NUNCA subas esto al repo
+.env
+.env.local
+.env.production
+
+# Supabase keys (Sprint 2)
+supabase/.branches
+supabase/.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+*.suo
+*.user
