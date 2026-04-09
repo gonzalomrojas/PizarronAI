@@ -9,31 +9,62 @@
 </head>
 <body>
 
+<!-- ===================== ONBOARDING (primer uso) ===================== -->
+<div id="onboarding-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 22px;width:100%;max-width:380px;">
+    <div style="font-family:'Bebas Neue';font-size:32px;color:var(--green);letter-spacing:3px;margin-bottom:4px">⚽ PIZARRÓN AI</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:24px;text-transform:uppercase;letter-spacing:1px">Sincronización en la nube</div>
 
+    <!-- PASO 1: Crear o unirse -->
+    <div id="paso-crear">
+      <div style="font-size:14px;color:var(--text);margin-bottom:20px;line-height:1.6">
+        Para sincronizar con tus amigos, creá un grupo nuevo o ingresá el código de un grupo existente.
+      </div>
+
+      <div style="font-family:'Bebas Neue';font-size:13px;letter-spacing:1px;color:var(--muted);margin-bottom:8px">TENGO UN CÓDIGO</div>
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <input type="text" id="input-grupo-id" placeholder="Ej: PICHA1" maxlength="8"
+          style="text-transform:uppercase;letter-spacing:2px;font-family:'Bebas Neue';font-size:20px;text-align:center">
+        <button class="btn btn-primary" onclick="unirseGrupo()" style="white-space:nowrap">Entrar</button>
+      </div>
+
+      <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:16px">— o —</div>
+
+      <button class="btn btn-secondary btn-full" onclick="crearGrupo()">
+        ✨ Crear grupo nuevo
+      </button>
+    </div>
+
+    <!-- PASO 2: Grupo creado — mostrar código -->
+    <div id="paso-creado" style="display:none;text-align:center">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">¡Tu grupo fue creado! Compartí este código con tus amigos:</div>
+      <div style="font-family:'Bebas Neue';font-size:52px;letter-spacing:8px;color:var(--yellow);margin:16px 0;background:var(--surface2);border-radius:12px;padding:16px;border:2px solid var(--yellow)" id="grupo-creado-id">------</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.6">
+        Cualquier amigo que use este código verá los mismos jugadores, partidos y ratings.
+      </div>
+      <button class="btn btn-primary btn-full" onclick="confirmarGrupoCreado()">¡Listo, entrar!</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== HEADER + WIZARD ===================== -->
 <header>
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
     <div>
-      <div class="logo">⚽ Pizarron AI</div>
-      <div class="subtitle">Emparejamiento inteligente · </div>
+      <div class="logo">⚽ Pizarrón AI</div>
+      <div class="subtitle">Balance inteligente · Sync en la nube</div>
     </div>
-    <div id="sync-status">💾 Local</div>
+    <div style="text-align:right">
+      <div id="sync-status" style="font-size:10px;color:var(--muted)">⏳ Conectando...</div>
+      <div id="grupo-label" style="font-size:10px;color:var(--muted);margin-top:2px;cursor:pointer;text-decoration:underline dotted" onclick="mostrarCodigo()"></div>
+    </div>
   </div>
   <div class="wizard">
-    <div class="wstep done"  onclick="goTab('jugadores')" title="Plantilla">
-      <div class="wdot">1</div><div class="wlabel">Plantilla</div>
-    </div>
-    <div class="wstep" onclick="goTab('partido')" title="Convocar">
-      <div class="wdot">2</div><div class="wlabel">Convocar</div>
-    </div>
-    <div class="wstep" onclick="goTab('equipos')" title="Equipos">
-      <div class="wdot">3</div><div class="wlabel">Equipos</div>
-    </div>
-    <div class="wstep" onclick="goTab('votar')" title="Votar">
-      <div class="wdot">4</div><div class="wlabel">Votar</div>
-    </div>
-    <div class="wstep" onclick="goTab('historial')" title="Historial">
-      <div class="wdot">5</div><div class="wlabel">Historial</div>
-    </div>
+    <div class="wstep done"  onclick="goTab('jugadores')"><div class="wdot">1</div><div class="wlabel">Plantilla</div></div>
+    <div class="wstep" onclick="goTab('partido')">        <div class="wdot">2</div><div class="wlabel">Convocar</div></div>
+    <div class="wstep" onclick="goTab('equipos')">        <div class="wdot">3</div><div class="wlabel">Equipos</div></div>
+    <div class="wstep" onclick="goTab('votar')">          <div class="wdot">4</div><div class="wlabel">Votar</div></div>
+    <div class="wstep" onclick="goTab('historial')">      <div class="wdot">5</div><div class="wlabel">Historial</div></div>
   </div>
 </header>
 
@@ -53,86 +84,58 @@
     <label>Nombre del jugador</label>
     <input type="text" id="input-nombre" placeholder="Ej: Gonzalo"
       onkeydown="if(event.key==='Enter') agregarJugador()">
-
     <label>Posición</label>
     <div class="pos-selector">
-      <div class="pos-btn" onclick="selectPos('ARQ')" id="pos-ARQ">
-        <span class="pos-icon">🧤</span><span class="pos-name">Arquero</span>
-      </div>
-      <div class="pos-btn" onclick="selectPos('DEF')" id="pos-DEF">
-        <span class="pos-icon">🛡️</span><span class="pos-name">Defensa</span>
-      </div>
-      <div class="pos-btn" onclick="selectPos('MED')" id="pos-MED">
-        <span class="pos-icon">🎯</span><span class="pos-name">Mediocampista</span>
-      </div>
-      <div class="pos-btn" onclick="selectPos('ATA')" id="pos-ATA">
-        <span class="pos-icon">⚡</span><span class="pos-name">Ataque</span>
-      </div>
+      <div class="pos-btn" onclick="selectPos('ARQ')" id="pos-ARQ"><span class="pos-icon">🧤</span><span class="pos-name">Arquero</span></div>
+      <div class="pos-btn" onclick="selectPos('DEF')" id="pos-DEF"><span class="pos-icon">🛡️</span><span class="pos-name">Defensa</span></div>
+      <div class="pos-btn" onclick="selectPos('MED')" id="pos-MED"><span class="pos-icon">🎯</span><span class="pos-name">Mediocampista</span></div>
+      <div class="pos-btn" onclick="selectPos('ATA')" id="pos-ATA"><span class="pos-icon">⚡</span><span class="pos-name">Ataque</span></div>
     </div>
-
     <div class="rating-row" style="margin-top:14px">
       <span class="rating-label">Rating general (1–10)</span>
       <input type="range" id="input-rating" min="1" max="10" step="0.5" value="5">
       <span class="rating-val" id="val-rating">5.0</span>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px">
-      1–3 Principiante · 4–6 Promedio · 7–8 Bueno · 9–10 Crack
-    </div>
-    <button class="btn btn-primary btn-full" style="margin-top:13px" onclick="agregarJugador()">
-      + Agregar jugador
-    </button>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">1–3 Principiante · 4–6 Promedio · 7–8 Bueno · 9–10 Crack</div>
+    <button class="btn btn-primary btn-full" style="margin-top:13px" onclick="agregarJugador()">+ Agregar jugador</button>
   </div>
   <div id="lista-jugadores"></div>
 </div>
 
-<!-- ===================== PARTIDO (CONVOCAR) ===================== -->
+<!-- ===================== PARTIDO ===================== -->
 <div id="tab-partido" class="view">
   <div class="section-title">Convocar</div>
-  <div id="warn-arq" class="warn-banner">
-    ⚠️ Seleccioná al menos 2 arqueros para armar equipos balanceados.
-  </div>
-  <div class="alert alert-yellow">
-    Tildá los que juegan hoy. Se persiste aunque cierres la app.
-  </div>
+  <div id="warn-arq" class="warn-banner">⚠️ Seleccioná al menos 2 arqueros para armar equipos balanceados.</div>
+  <div class="alert alert-yellow">Tildá los que juegan hoy. Los convocados se guardan en este dispositivo.</div>
   <div id="lista-convocados"></div>
   <div id="float-convocados" class="float-bar" style="display:none">
     <div class="float-count">Convocados: <span id="count-convocados">0</span></div>
-    <button class="btn btn-primary" onclick="goTab('equipos'); generarEquipos()">
-      Armar equipos →
-    </button>
+    <button class="btn btn-primary" onclick="goTab('equipos'); generarEquipos()">Armar equipos →</button>
   </div>
 </div>
 
 <!-- ===================== EQUIPOS ===================== -->
 <div id="tab-equipos" class="view">
   <div class="section-title">Equipos</div>
-  <div id="equipos-output">
-    <div class="empty">Convocá jugadores y generá los equipos desde la pestaña Convocar.</div>
-  </div>
+  <div id="equipos-output"><div class="empty">Convocá jugadores y generá los equipos desde la pestaña Convocar.</div></div>
   <div id="seccion-resultado" style="display:none">
     <hr>
     <div class="section-title" style="margin-bottom:6px">Cargar resultado</div>
-    <div class="alert alert-blue" style="font-size:12px">
-      Ingresá el resultado para guardarlo en el historial.
-    </div>
+    <div class="alert alert-blue" style="font-size:12px">Ingresá el resultado para guardarlo en el historial.</div>
     <label style="text-align:center;display:block">🟢 Equipo A &nbsp;—&nbsp; Equipo B 🔵</label>
     <div class="score-input">
       <input type="number" class="score-box" id="goles-a" min="0" max="99" value="0">
       <span class="score-sep">—</span>
       <input type="number" class="score-box" id="goles-b" min="0" max="99" value="0">
     </div>
-    <button class="btn btn-primary btn-full" onclick="guardarPartido()">
-      💾 Guardar en historial
-    </button>
+    <button class="btn btn-primary btn-full" onclick="guardarPartido()">💾 Guardar en historial</button>
   </div>
 </div>
 
 <!-- ===================== VOTAR ===================== -->
 <div id="tab-votar" class="view">
   <div class="section-title">Votar desempeño</div>
-  <div class="alert alert-green">
-    Calificá atributos. Rating se actualiza con decaimiento temporal: los últimos 5 partidos pesan 3×.
-  </div>
+  <div class="alert alert-green">Calificá atributos. Rating se actualiza con decaimiento temporal: los últimos 5 partidos pesan 3×.</div>
   <div id="lista-votos"></div>
   <div id="btn-guardar-votos" style="display:none;margin-top:4px">
     <button class="btn btn-primary btn-full" onclick="guardarVotos()">✅ Guardar votos</button>
@@ -145,26 +148,33 @@
   <div id="lista-historial"></div>
 </div>
 
-<!-- ===================== MODAL EDITAR JUGADOR ===================== -->
+<!-- ===================== MODAL EDITAR ===================== -->
 <div class="modal-overlay" id="modal-editar">
   <div class="modal">
     <button class="modal-close" onclick="cerrarModal()">✕</button>
     <div class="modal-title" id="modal-nombre">Editar jugador</div>
     <div id="modal-contenido"></div>
-    <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="guardarEdicion()">
-      Guardar cambios
-    </button>
+    <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="guardarEdicion()">Guardar cambios</button>
   </div>
 </div>
 
 <!-- ===================== SCRIPTS ===================== -->
-<!-- Orden importante: config → state → rating → algorithm → ui → app -->
 <script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/rating.js"></script>
 <script src="js/algorithm.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
-
+<script>
+  function mostrarCodigo() {
+    const id = localStorage.getItem('pizarron_grupo_id');
+    if (id) alert('Código de tu grupo:\n\n' + id + '\n\nCompartilo con tus amigos para que vean los mismos datos.');
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const id = localStorage.getItem('pizarron_grupo_id');
+    const el = document.getElementById('grupo-label');
+    if (id && el) el.textContent = '👥 Grupo: ' + id;
+  });
+</script>
 </body>
 </html>
