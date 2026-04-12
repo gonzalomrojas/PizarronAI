@@ -9,6 +9,9 @@ function goTab(tab) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
 
+  // Scroll al top al cambiar de tab — fix para móvil
+  window.scrollTo({ top: 0, behavior: 'instant' });
+
   if (tab === 'jugadores') renderJugadores();
   if (tab === 'partido')   renderPartido();
   if (tab === 'votar')     prepararVotacion();
