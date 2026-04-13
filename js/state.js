@@ -73,6 +73,14 @@ async function loginEmail(email, password) {
     user:   currentUser,
     expiry: Date.now() + (data.expires_in * 1000),
   }));
+  // Guardar/actualizar email en user_profiles para que otros usuarios lo vean
+  try {
+    await sbFetch('user_profiles', {
+      method:  'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+      body:    JSON.stringify({ user_id: currentUser.id, email: currentUser.email }),
+    });
+  } catch(e) { console.warn('[profiles] No se pudo guardar email:', e); }
   return currentUser;
 }
 
@@ -86,6 +94,14 @@ async function registrarEmail(email, password) {
       user:   currentUser,
       expiry: Date.now() + (data.expires_in * 1000),
     }));
+    // Guardar email en user_profiles
+    try {
+      await sbFetch('user_profiles', {
+        method:  'POST',
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+        body:    JSON.stringify({ user_id: currentUser.id, email: currentUser.email }),
+      });
+    } catch(e) { console.warn('[profiles] No se pudo guardar email:', e); }
   } else {
     currentUser = { id: data.user?.id, email: data.user?.email };
   }
@@ -181,27 +197,41 @@ async function cargarPermisoVotacion() {
   } catch(e) { puedeVotar = false; }
 }
 
-// Carga lista de todos los miembros del grupo con su permiso y email
+// Carga lista de todos los miembros del grupo con su permiso y email real
 async function cargarMiembrosGrupo() {
   // 1. Todos los users del grupo
   const miembros = await sbFetch(
     'user_grupos?grupo_id=eq.' + grupoId + '&select=user_id,role'
   );
+  if (!miembros || !miembros.length) return [];
+
   // 2. Permisos de votación actuales
   const permisos = await sbFetch(
     'voto_permisos?grupo_id=eq.' + grupoId + '&select=user_id'
   );
   const permisosSet = new Set((permisos || []).map(p => p.user_id));
 
-  // 3. Emails de los users via Auth Admin API — fallback: mostrar solo ID
-  //    Como no tenemos acceso Admin en el frontend, guardamos emails en una tabla auxiliar
-  //    Por ahora mostramos los primeros 8 chars del UUID como identificador
-  return (miembros || []).map(m => ({
+  // 3. Emails desde user_profiles (tabla pública que llenamos en login/registro)
+  const userIds  = miembros.map(m => m.user_id);
+  const inFilter = userIds.map(id => '"' + id + '"').join(',');
+  let emailMap   = {};
+  try {
+    const profiles = await sbFetch(
+      'user_profiles?user_id=in.(' + userIds.join(',') + ')&select=user_id,email'
+    );
+    (profiles || []).forEach(p => { emailMap[p.user_id] = p.email; });
+  } catch(e) {
+    console.warn('[miembros] No se pudieron cargar emails:', e);
+  }
+
+  return miembros.map(m => ({
     user_id:    m.user_id,
     role:       m.role || 'member',
     puedeVotar: m.role === 'admin' || permisosSet.has(m.user_id),
     esYo:       m.user_id === currentUser.id,
-    label:      m.user_id === currentUser.id ? currentUser.email : '...' + m.user_id.slice(-6),
+    // Mostrar email real si está disponible, si no el email propio, si no fragmento del ID
+    label:      emailMap[m.user_id] || 
+                (m.user_id === currentUser.id ? currentUser.email : '···' + m.user_id.slice(-8)),
   }));
 }
 
