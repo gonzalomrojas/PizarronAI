@@ -7,77 +7,129 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
   <style>
-    /* ---- PANTALLAS ---- */
     #screen-login, #screen-onboarding {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,0.95); z-index: 1000;
-      align-items: center; justify-content: center; padding: 20px;
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,0.95); z-index:1000;
+      align-items:center; justify-content:center; padding:20px;
     }
-    #screen-app { display: none; }
+    #screen-app { display:none; }
     .auth-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 16px; padding: 28px 22px; width: 100%; max-width: 380px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:16px; padding:28px 22px; width:100%; max-width:380px;
     }
-    .auth-logo { font-family:'Bebas Neue'; font-size:30px; color:var(--green); letter-spacing:3px; margin-bottom:4px; }
+    .auth-logo  { font-family:'Bebas Neue'; font-size:30px; color:var(--green); letter-spacing:3px; margin-bottom:4px; }
     .auth-titulo { font-family:'Bebas Neue'; font-size:22px; letter-spacing:2px; margin-bottom:18px; color:var(--text); }
-    .auth-input { margin-bottom: 12px; }
     .auth-error {
-      display: none; background: #2a0a0a; border: 1px solid var(--red);
-      border-radius: 8px; padding: 10px 12px; font-size: 13px;
-      color: var(--red); margin-bottom: 12px; line-height: 1.5;
+      display:none; background:#2a0a0a; border:1px solid var(--red);
+      border-radius:8px; padding:10px 12px; font-size:13px;
+      color:var(--red); margin-bottom:12px; line-height:1.5;
     }
     .auth-toggle { text-align:center; margin-top:16px; font-size:13px; color:var(--muted); }
     .auth-toggle button { background:none; border:none; color:var(--green); font-weight:600; cursor:pointer; font-size:13px; text-decoration:underline; }
     .grupo-codigo {
       font-family:'Bebas Neue'; font-size:52px; letter-spacing:8px;
       color:var(--yellow); margin:16px 0; background:var(--surface2);
-      border-radius:12px; padding:16px; border:2px solid var(--yellow);
-      text-align:center;
+      border-radius:12px; padding:16px; border:2px solid var(--yellow); text-align:center;
     }
 
-    /* ---- HEADER USUARIO ---- */
-    .user-bar {
-      display: flex; align-items: center; gap: 8px; margin-top: 6px;
-      font-size: 11px; color: var(--muted);
+    /* ---- HEADER USER BAR ---- */
+    .user-bar { display:flex; align-items:center; gap:6px; margin-top:5px; flex-wrap:wrap; }
+    .user-email { font-size:11px; color:var(--green); font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #role-badge { font-size:10px; font-weight:700; }
+    .btn-header { border-radius:6px; font-size:10px; font-weight:700; padding:3px 8px; cursor:pointer; font-family:'DM Sans',sans-serif; border:1px solid; }
+    .btn-miembros { background:var(--surface2); color:var(--yellow); border-color:#4a3a00; }
+    .btn-miembros:hover { background:#1f1a00; }
+    .btn-cambiar  { background:var(--surface2); color:var(--muted); border-color:var(--border); }
+    .btn-cambiar:hover { border-color:var(--green); color:var(--green); }
+    .btn-salir    { background:#2a0a0a; color:var(--red); border-color:#4a1010; }
+    .btn-salir:hover { background:#3a0a0a; }
+
+    /* ---- MODAL MIEMBROS ---- */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:500; align-items:flex-end; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px 16px 0 0; padding:20px 16px 32px; width:100%; max-width:480px; max-height:85vh; overflow-y:auto; }
+    .modal-title { font-family:'Bebas Neue'; font-size:22px; letter-spacing:2px; margin-bottom:4px; }
+    .modal-sub   { font-size:12px; color:var(--muted); margin-bottom:16px; }
+    .modal-close { float:right; background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; }
+    .attr-edit-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .attr-edit-label { font-size:12px; color:var(--muted); min-width:100px; }
+    .attr-edit-val { font-family:'Bebas Neue'; font-size:20px; color:var(--yellow); min-width:28px; text-align:center; }
+
+    /* ---- MIEMBROS LIST ---- */
+    .miembro-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 0; border-bottom:1px solid var(--border); gap:8px; flex-wrap:wrap;
     }
-    .user-email { color: var(--green); font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .btn-salir {
-      background: #2a0a0a; color: var(--red); border: 1px solid #4a1010;
-      border-radius: 6px; font-size: 10px; font-weight:700; padding: 3px 8px;
-      cursor: pointer; white-space:nowrap; font-family:'DM Sans',sans-serif;
+    .miembro-info { display:flex; align-items:center; gap:8px; flex:1; }
+    .miembro-label { font-size:13px; color:var(--text); }
+    .miembro-accion { display:flex; align-items:center; gap:6px; }
+    .role-chip { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
+    .role-admin  { background:#2a2000; color:var(--yellow); border:1px solid #4a3a00; }
+    .role-member { background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+    .btn-permiso { border-radius:6px; font-size:11px; font-weight:600; padding:4px 10px; cursor:pointer; font-family:'DM Sans',sans-serif; border:1px solid; }
+    .btn-dar     { background:#0a2a0a; color:var(--green); border-color:var(--green); }
+    .btn-dar:hover { background:#0d3a0d; }
+    .btn-quitar  { background:#2a0a0a; color:var(--red); border-color:var(--red); }
+    .btn-quitar:hover { background:#3a0a0a; }
+
+    /* ---- LOCK OVERLAY para votar sin permiso ---- */
+    .vote-locked {
+      background:#1a1a1a; border:1px solid var(--border); border-radius:12px;
+      padding:28px; text-align:center; margin:12px 0;
     }
-    .btn-salir:hover { background: #3a0a0a; }
-    .btn-cambiar-grupo {
-      background: var(--surface2); color: var(--muted); border: 1px solid var(--border);
-      border-radius: 6px; font-size: 10px; font-weight:600; padding: 3px 8px;
-      cursor: pointer; white-space:nowrap; font-family:'DM Sans',sans-serif;
+    .vote-locked-icon { font-size:36px; margin-bottom:10px; }
+    .vote-locked-title { font-family:'Bebas Neue'; font-size:20px; letter-spacing:2px; color:var(--muted); margin-bottom:6px; }
+    .vote-locked-msg { font-size:13px; color:var(--muted); line-height:1.6; }
+
+    /* ---- EDITAR JUGADORES DE PARTIDO ---- */
+    .ejp-jugador {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:6px 0; border-bottom:1px solid var(--border); font-size:13px;
     }
-    .btn-cambiar-grupo:hover { border-color: var(--green); color: var(--green); }
+    .ejp-jugador .btn-quitar {
+      background:#2a0a0a; color:var(--red); border:1px solid #4a1010;
+      border-radius:4px; font-size:11px; padding:2px 7px; cursor:pointer;
+    }
+    .ejp-col-title {
+      font-family:'Bebas Neue'; font-size:16px; letter-spacing:1px;
+      margin-bottom:8px;
+    }
+    .ejp-col-a { color:var(--green); }
+    .ejp-col-b { color:var(--blue); }
+
+    /* ---- SELECT MULTIPLE ---- */
+    select[multiple] {
+      height: 140px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 6px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    select[multiple] option:checked {
+      background: var(--green-dark);
+      color: #fff;
+    }
   </style>
 </head>
 <body>
 
-<!-- ===================== PANTALLA: LOGIN ===================== -->
+<!-- ===== PANTALLA LOGIN ===== -->
 <div id="screen-login">
   <div class="auth-card">
     <div class="auth-logo">⚽ Pizarrón AI</div>
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:20px">Balance inteligente · Sync en la nube</div>
-
     <div class="auth-titulo" id="auth-titulo">👤 Iniciar sesión</div>
-
     <div class="auth-error" id="auth-error"></div>
-
-    <div class="auth-input">
-      <label>Email</label>
-      <input type="email" id="input-auth-email" placeholder="tu@email.com" autocomplete="email">
-    </div>
-    <div class="auth-input">
-      <label>Contraseña</label>
-      <input type="password" id="input-auth-password" placeholder="Mínimo 6 caracteres" autocomplete="current-password">
-    </div>
-
-    <button class="btn btn-primary btn-full" id="btn-submit-auth" onclick="submitAuth()">Entrar</button>
-
+    <label style="margin-top:0">Email</label>
+    <input type="email"    id="input-auth-email"    placeholder="tu@email.com"          autocomplete="email"            style="margin-bottom:10px">
+    <label>Contraseña</label>
+    <input type="password" id="input-auth-password" placeholder="Mínimo 6 caracteres"   autocomplete="current-password" style="margin-bottom:4px">
+    <button class="btn btn-primary btn-full" id="btn-submit-auth" onclick="submitAuth()" style="margin-top:14px">Entrar</button>
     <div class="auth-toggle">
       <span id="auth-subtitulo">¿No tenés cuenta?</span>
       <button id="btn-toggle-auth" onclick="toggleModoAuth()">Registrarse</button>
@@ -85,45 +137,38 @@
   </div>
 </div>
 
-<!-- ===================== PANTALLA: ONBOARDING GRUPO ===================== -->
+<!-- ===== PANTALLA ONBOARDING GRUPO ===== -->
 <div id="screen-onboarding">
   <div class="auth-card">
     <div class="auth-logo">⚽ Pizarrón AI</div>
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:20px">Configurar grupo</div>
-
-    <!-- Paso 1: Crear o unirse -->
     <div id="paso-grupo-crear">
       <div style="font-size:14px;color:var(--text);margin-bottom:20px;line-height:1.6">
-        Para sincronizar con tus amigos, creá un grupo nuevo o ingresá el código de un grupo existente.
+        Creá un grupo nuevo o ingresá el código de uno existente para sincronizar con tus amigos.
       </div>
-
-      <label style="font-family:'Bebas Neue';font-size:13px;letter-spacing:1px;color:var(--muted)">TENGO UN CÓDIGO</label>
+      <label style="font-family:'Bebas Neue';font-size:13px;letter-spacing:1px;color:var(--muted);margin-top:0">TENGO UN CÓDIGO</label>
       <div style="display:flex;gap:8px;margin:8px 0 20px">
         <input type="text" id="input-codigo-grupo" placeholder="Ej: PICHA1" maxlength="8"
           style="text-transform:uppercase;letter-spacing:2px;font-family:'Bebas Neue';font-size:20px;text-align:center">
         <button class="btn btn-primary" id="btn-unirse-grupo" onclick="unirseGrupo()" style="white-space:nowrap">Entrar</button>
       </div>
-
       <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:16px">— o —</div>
       <button class="btn btn-secondary btn-full" onclick="crearGrupo()">✨ Crear grupo nuevo</button>
     </div>
-
-    <!-- Paso 2: Grupo creado -->
     <div id="paso-grupo-creado" style="display:none;text-align:center">
       <div style="font-size:13px;color:var(--muted);margin-bottom:12px">¡Tu grupo fue creado! Compartí este código:</div>
       <div class="grupo-codigo" id="grupo-creado-codigo">------</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.6">
-        Cualquier amigo con este código verá los mismos jugadores, partidos y ratings.
+        Vas a ser el <strong style="color:var(--yellow)">admin</strong> del grupo. Tus amigos entran como members con el código.
       </div>
       <button class="btn btn-primary btn-full" id="btn-confirmar-grupo" onclick="confirmarGrupoCreado()">¡Listo, entrar!</button>
     </div>
   </div>
 </div>
 
-<!-- ===================== PANTALLA: APP ===================== -->
+<!-- ===== PANTALLA APP ===== -->
 <div id="screen-app">
 
-  <!-- HEADER -->
   <header>
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
@@ -132,16 +177,16 @@
       </div>
       <div style="text-align:right">
         <div id="sync-status" style="font-size:10px;color:var(--muted)">⏳ Conectando...</div>
-        <div id="grupo-label" style="font-size:10px;color:var(--muted);margin-top:1px;cursor:pointer;text-decoration:underline dotted" onclick="mostrarCodigo()"></div>
+        <div id="grupo-label" style="font-size:10px;color:var(--muted);cursor:pointer;text-decoration:underline dotted" onclick="mostrarCodigo()"></div>
       </div>
     </div>
-    <!-- Usuario logueado -->
     <div class="user-bar">
       <span class="user-email" id="user-email-label"></span>
-      <button class="btn-cambiar-grupo" onclick="cambiarGrupo()">↔ Grupo</button>
-      <button class="btn-salir" onclick="salirSesion()">✕ Salir</button>
+      <span id="role-badge"></span>
+      <button class="btn-header btn-miembros solo-admin" onclick="abrirPanelMiembros()" style="display:none">👥 Miembros</button>
+      <button class="btn-header btn-cambiar" onclick="cambiarGrupo()">↔ Grupo</button>
+      <button class="btn-header btn-salir"   onclick="salirSesion()">✕ Salir</button>
     </div>
-    <!-- Wizard -->
     <div class="wizard" style="margin-top:8px">
       <div class="wstep done"  onclick="goTab('jugadores')"><div class="wdot">1</div><div class="wlabel">Plantilla</div></div>
       <div class="wstep" onclick="goTab('partido')">        <div class="wdot">2</div><div class="wlabel">Convocar</div></div>
@@ -151,19 +196,19 @@
     </div>
   </header>
 
-  <!-- TABS -->
   <div class="tabs">
     <button class="tab active"  onclick="goTab('jugadores')">👥 Jugadores</button>
     <button class="tab"         onclick="goTab('partido')">🎯 Convocar</button>
     <button class="tab"         onclick="goTab('equipos')">⚖️ Equipos</button>
-    <button class="tab"         onclick="goTab('votar')">⭐ Votar</button>
+    <button class="tab" id="tab-btn-votar" onclick="goTab('votar')">⭐ Votar</button>
     <button class="tab"         onclick="goTab('historial')">📋 Historial</button>
   </div>
 
   <!-- JUGADORES -->
   <div id="tab-jugadores" class="view active">
     <div class="section-title">Plantilla</div>
-    <div class="card">
+    <!-- Formulario solo para admin -->
+    <div class="card solo-admin" style="display:none">
       <label>Nombre del jugador</label>
       <input type="text" id="input-nombre" placeholder="Ej: Gonzalo" onkeydown="if(event.key==='Enter') agregarJugador()">
       <label>Posición</label>
@@ -188,7 +233,7 @@
   <div id="tab-partido" class="view">
     <div class="section-title">Convocar</div>
     <div id="warn-arq" class="warn-banner">⚠️ Seleccioná al menos 2 arqueros para armar equipos balanceados.</div>
-    <div class="alert alert-yellow">Tildá los que juegan hoy. Los convocados se guardan en este dispositivo.</div>
+    <div class="alert alert-yellow">Tildá los que juegan hoy.</div>
     <div id="lista-convocados"></div>
     <div id="float-convocados" class="float-bar" style="display:none">
       <div class="float-count">Convocados: <span id="count-convocados">0</span></div>
@@ -210,17 +255,16 @@
         <span class="score-sep">—</span>
         <input type="number" class="score-box" id="goles-b" min="0" max="99" value="0">
       </div>
-      <button class="btn btn-primary btn-full" onclick="guardarPartido()">💾 Guardar en historial</button>
+      <button class="btn btn-primary btn-full solo-admin" style="display:none" onclick="guardarPartido()">💾 Guardar en historial</button>
+      <div class="alert alert-yellow solo-member" style="display:none;font-size:12px;margin-top:8px">Solo el admin puede guardar el resultado.</div>
     </div>
   </div>
 
   <!-- VOTAR -->
   <div id="tab-votar" class="view">
     <div class="section-title">Votar desempeño</div>
-    <div class="alert alert-green">Calificá atributos. Rating se actualiza con decaimiento temporal: los últimos 5 partidos pesan 3×.</div>
-    <div id="lista-votos"></div>
-    <div id="btn-guardar-votos" style="display:none;margin-top:4px">
-      <button class="btn btn-primary btn-full" onclick="guardarVotos()">✅ Guardar votos</button>
+    <div id="votar-contenido">
+      <!-- Se rellena en prepararVotacion() según permisos -->
     </div>
   </div>
 
@@ -232,7 +276,7 @@
 
 </div><!-- /screen-app -->
 
-<!-- MODAL EDITAR -->
+<!-- MODAL EDITAR JUGADOR -->
 <div class="modal-overlay" id="modal-editar">
   <div class="modal">
     <button class="modal-close" onclick="cerrarModal()">✕</button>
@@ -242,13 +286,105 @@
   </div>
 </div>
 
-<!-- SCRIPTS — orden importante -->
+<!-- MODAL MIEMBROS (solo admin) -->
+<div class="modal-overlay" id="modal-miembros">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarPanelMiembros()">✕</button>
+    <div class="modal-title">👥 Miembros del grupo</div>
+    <div class="modal-sub">Gestioná quién puede votar después del partido.</div>
+    <div id="miembros-lista"></div>
+  </div>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/rating.js"></script>
 <script src="js/algorithm.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
+
+<!-- MODAL: PARTIDO MANUAL -->
+<div class="modal-overlay" id="modal-partido-manual">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModalManual()">✕</button>
+    <div class="modal-title">📝 Cargar partido manual</div>
+    <div class="modal-sub">Registrá un partido que ya se jugó o uno sin equipos generados.</div>
+
+    <label>Fecha</label>
+    <input type="text" id="manual-fecha" placeholder="Ej: 12/04/2026">
+    <label>Hora (opcional)</label>
+    <input type="text" id="manual-hora" placeholder="Ej: 21:00">
+
+    <label>Resultado — 🟢 Equipo A</label>
+    <input type="number" id="manual-goles-a" placeholder="Goles A" min="0" max="99">
+    <label>Resultado — 🔵 Equipo B</label>
+    <input type="number" id="manual-goles-b" placeholder="Goles B" min="0" max="99">
+
+    <label>🟢 Equipo A — Seleccioná jugadores</label>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Mantené Ctrl (PC) o toque largo (móvil) para seleccionar varios</div>
+    <select id="manual-jugadores-a" multiple></select>
+
+    <label>🔵 Equipo B — Seleccioná jugadores</label>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Mantené Ctrl (PC) o toque largo (móvil) para seleccionar varios</div>
+    <select id="manual-jugadores-b" multiple></select>
+
+    <button class="btn btn-primary btn-full" id="btn-guardar-manual" onclick="guardarPartidoManual()" style="margin-top:14px">
+      💾 Guardar partido
+    </button>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR RESULTADO DE PARTIDO -->
+<div class="modal-overlay" id="modal-editar-resultado">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarEditarResultado()">✕</button>
+    <div class="modal-title">✏️ Editar resultado</div>
+    <div class="modal-sub">Solo el admin puede modificar el resultado de un partido guardado.</div>
+
+    <label>Fecha</label>
+    <input type="text" id="edit-res-fecha" placeholder="Ej: 12/04/2026">
+    <label>Hora</label>
+    <input type="text" id="edit-res-hora" placeholder="Ej: 21:00">
+
+    <label style="margin-top:14px;text-align:center;display:block">🟢 Equipo A &nbsp;—&nbsp; Equipo B 🔵</label>
+    <div class="score-input">
+      <input type="number" class="score-box" id="edit-res-goles-a" min="0" max="99">
+      <span class="score-sep">—</span>
+      <input type="number" class="score-box" id="edit-res-goles-b" min="0" max="99">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="guardarCambioResultado()" style="margin-top:10px">
+      💾 Guardar cambios
+    </button>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR JUGADORES DE UN PARTIDO -->
+<div class="modal-overlay" id="modal-editar-jugadores-partido">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarEditarJugadoresPartido()">✕</button>
+    <div class="modal-title">👥 Editar jugadores del partido</div>
+    <div class="modal-sub">Agregá o quitá jugadores de cada equipo. Solo el admin puede hacer esto.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <div class="ejp-col-title ejp-col-a">🟢 Equipo A</div>
+        <div id="ejp-equipo-a"></div>
+      </div>
+      <div>
+        <div class="ejp-col-title ejp-col-b">🔵 Equipo B</div>
+        <div id="ejp-equipo-b"></div>
+      </div>
+    </div>
+
+    <hr>
+    <div style="font-family:'Bebas Neue';font-size:14px;letter-spacing:1px;color:var(--muted);margin:10px 0 8px">AGREGAR JUGADOR</div>
+    <div id="ejp-disponibles"></div>
+
+    <button class="btn btn-primary btn-full" onclick="guardarCambiosJugadoresPartido()" style="margin-top:14px">
+      💾 Guardar cambios
+    </button>
+  </div>
+</div>
 
 </body>
 </html>

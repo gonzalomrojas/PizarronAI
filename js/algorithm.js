@@ -92,9 +92,13 @@ function generarEquipos() {
     }
   }
 
-  // ---- Guardar resultado en state ----
-  state.equipoA = teamA.map(j => j.id);
-  state.equipoB = teamB.map(j => j.id);
+  // ---- Guardar resultado en state (IDs + snapshot completo para restaurar vista) ----
+  state.equipoA         = teamA.map(j => j.id);
+  state.equipoB         = teamB.map(j => j.id);
+  state.equipoASnapshot = teamA.map(j => ({...j}));
+  state.equipoBSnapshot = teamB.map(j => ({...j}));
+  state.sumA            = sumA;
+  state.sumB            = sumB;
   saveState();
 
   renderEquipos(teamA, teamB, sumA, sumB, arqs.length, convocados.length);
@@ -103,9 +107,10 @@ function generarEquipos() {
 // ===================== RENDER EQUIPOS =====================
 
 function renderEquipos(teamA, teamB, sumA, sumB, nArqs, totalJugadores) {
-  const diff       = Math.abs(sumA - sumB);
-  const diffClass  = diff < 1.5 ? 'diff-ok' : diff < 3.5 ? 'diff-warn' : 'diff-bad';
-  const diffLabel  = diff < 1.5 ? '✅ Muy parejos' : diff < 3.5 ? '⚠️ Aceptable' : '❗ Desbalanceados';
+  const diff      = Math.abs(sumA - sumB);
+  const diffClass = diff < 1.5 ? 'diff-ok' : diff < 3.5 ? 'diff-warn' : 'diff-bad';
+  const diffLabel = diff < 1.5 ? '✅ Muy parejos' : diff < 3.5 ? '⚠️ Aceptable' : '❗ Desbalanceados';
+  const admin     = typeof esAdmin === 'function' && esAdmin();
 
   const renderTeam = (team, sum, cls, label) => `
     <div class="team-card ${cls}">
@@ -122,8 +127,15 @@ function renderEquipos(teamA, teamB, sumA, sumB, nArqs, totalJugadores) {
   const arqWarning = (nArqs < 2 && totalJugadores >= 4)
     ? `<div class="alert alert-orange" style="font-size:12px;margin-top:8px">
         ⚠️ Solo hay ${nArqs} arquero. Los equipos quedaron sin ARQ dedicado.
-       </div>`
-    : '';
+       </div>` : '';
+
+  // Indicador de que ya hay resultado cargado para estos equipos
+  const yaGuardado = state.historial.length > 0 &&
+    state.historial[0].equipoA.some(j => state.equipoA.includes(j.id));
+  const guardadoBanner = yaGuardado
+    ? `<div class="alert alert-green" style="margin-top:8px;font-size:12px">
+        ✅ Resultado ya guardado en historial.
+       </div>` : '';
 
   document.getElementById('equipos-output').innerHTML = `
     <div class="alert alert-green" style="text-align:center;padding:10px">
@@ -135,15 +147,22 @@ function renderEquipos(teamA, teamB, sumA, sumB, nArqs, totalJugadores) {
       ${renderTeam(teamB, sumB, 'team-b', '🔵 EQUIPO B')}
     </div>
     ${arqWarning}
+    ${guardadoBanner}
     <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--muted)">
-      ${totalJugadores} jugadores · ${teamA.length} vs ${teamB.length} · SA ${SA_ITERATIONS} iter.
+      ${totalJugadores} jugadores · ${teamA.length} vs ${teamB.length}
     </div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-secondary" style="flex:1;justify-content:center" onclick="generarEquipos()">🔀 Mezclar</button>
       <button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="goTab('votar')">⭐ Votar</button>
     </div>`;
 
-  document.getElementById('seccion-resultado').style.display = 'block';
-  document.getElementById('goles-a').value = 0;
-  document.getElementById('goles-b').value = 0;
+  // Sección de resultado — solo visible para admin, persiste al volver al tab
+  const seccion = document.getElementById('seccion-resultado');
+  if (admin && !yaGuardado) {
+    seccion.style.display = 'block';
+    document.getElementById('goles-a').value = '';
+    document.getElementById('goles-b').value = '';
+  } else if (!admin) {
+    seccion.style.display = 'none';
+  }
 }

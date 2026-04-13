@@ -14,10 +14,29 @@ function goTab(tab) {
 
   if (tab === 'jugadores') renderJugadores();
   if (tab === 'partido')   renderPartido();
+  if (tab === 'equipos')   restaurarEquipos();   // ← KEY FIX: restaura la vista si ya hay equipos
   if (tab === 'votar')     prepararVotacion();
   if (tab === 'historial') renderHistorial();
 
   updateWizard(tab);
+}
+
+// Restaura la vista de equipos desde el snapshot guardado en state
+// Se llama cada vez que el usuario vuelve al tab Equipos
+function restaurarEquipos() {
+  const A = state.equipoASnapshot || [];
+  const B = state.equipoBSnapshot || [];
+  if (!A.length || !B.length) {
+    // No hay equipos generados todavía
+    document.getElementById('equipos-output').innerHTML =
+      '<div class="empty">Convocá jugadores y generá los equipos desde la pestaña Convocar.</div>';
+    document.getElementById('seccion-resultado').style.display = 'none';
+    return;
+  }
+  // Hay equipos → restaurar la vista completa
+  const sumA = state.sumA || A.reduce((s,j) => s+j.rating, 0);
+  const sumB = state.sumB || B.reduce((s,j) => s+j.rating, 0);
+  renderEquipos(A, B, sumA, sumB, A.filter(j=>j.pos==='ARQ').length + B.filter(j=>j.pos==='ARQ').length, A.length+B.length);
 }
 
 function updateWizard(activeTab) {
@@ -160,15 +179,32 @@ function renderPartido() {
 // ===================== VOTAR =====================
 
 function prepararVotacion() {
-  const convocados = state.jugadores.filter(j => state.convocados.includes(j.id));
-  const lista      = document.getElementById('lista-votos');
-  const btnGuardar = document.getElementById('btn-guardar-votos');
+  const contenedor = document.getElementById('votar-contenido');
+  if (!contenedor) return;
 
-  if (!convocados.length) {
-    lista.innerHTML = '<div class="empty">No hay jugadores convocados.<br><br>Volvé a Convocar y tildá los jugadores.</div>';
-    btnGuardar.style.display = 'none';
+  // Sin permiso → pantalla de bloqueo
+  if (typeof puedeVotar !== 'undefined' && !puedeVotar) {
+    contenedor.innerHTML = `
+      <div class="vote-locked">
+        <div class="vote-locked-icon">🔒</div>
+        <div class="vote-locked-title">Sin permiso de votación</div>
+        <div class="vote-locked-msg">
+          El admin todavía no te habilitó para votar.<br><br>
+          Pedile que abra el panel <strong>Miembros</strong> y te active el permiso.
+        </div>
+      </div>`;
     return;
   }
+
+  const convocados = state.jugadores.filter(j => state.convocados.includes(j.id));
+
+  if (!convocados.length) {
+    contenedor.innerHTML = '<div class="empty">No hay jugadores convocados.<br><br>Volvé a Convocar y tildá los jugadores.</div>';
+    return;
+  }
+
+  contenedor.innerHTML = '<div id="lista-votos"></div><div id="btn-guardar-votos" style="margin-top:4px"><button class="btn btn-primary btn-full" onclick="guardarVotos()">✅ Guardar votos</button></div>';
+  const lista = document.getElementById('lista-votos');
 
   lista.innerHTML = convocados.map(j => {
     const pos = j.pos || 'MED';
@@ -204,7 +240,7 @@ function prepararVotacion() {
     </div>`;
   }).join('');
 
-  btnGuardar.style.display = 'block';
+
 }
 
 function actualizarVotoPreview(id) {
@@ -226,9 +262,17 @@ function actualizarVotoPreview(id) {
 
 function renderHistorial() {
   const lista = document.getElementById('lista-historial');
+  const admin = typeof esAdmin === 'function' && esAdmin();
+
+  // Botón de cargar partido manual — solo admin
+  const btnManual = admin ? `
+    <button class="btn btn-secondary btn-full" style="margin-bottom:12px" onclick="abrirModalPartidoManual()">
+      📝 Cargar partido manualmente
+    </button>` : '';
+
   if (!state.historial.length) {
-    lista.innerHTML = `<div class="empty">Todavía no hay partidos guardados.<br><br>
-      Cargá el resultado desde la pestaña Equipos.</div>`;
+    lista.innerHTML = btnManual + `<div class="empty">Todavía no hay partidos guardados.<br><br>
+      Cargá el resultado desde la pestaña Equipos o con el botón de arriba.</div>`;
     return;
   }
 
@@ -238,16 +282,30 @@ function renderHistorial() {
     return '<span class="tag tag-red">❗ Desiguales</span>';
   };
   const tagResultado = t => {
-    if (t === 'sorpresa')       return '<span class="tag tag-yellow">🔄 Sorpresa</span>';
-    if (t === 'gano_favorito')  return '<span class="tag tag-green">📊 Ganó el favorito</span>';
+    if (t === 'sorpresa')      return '<span class="tag tag-yellow">🔄 Sorpresa</span>';
+    if (t === 'gano_favorito') return '<span class="tag tag-green">📊 Ganó el favorito</span>';
     return '<span class="tag tag-blue">🤝 Empate</span>';
   };
 
-  lista.innerHTML = state.historial.map((p, idx) => `
+  const cards = state.historial.map((p, idx) => {
+    const esUltimo    = idx === 0;
+    const puedeUndo   = admin && esUltimo && !p.esManual && p.snapshotJugadores;
+    const manualBadge = p.esManual ? '<span class="tag tag-blue" style="font-size:10px">✍️ Manual</span>' : '';
+
+    const botonesAdmin = admin ? `
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary" style="flex:1;justify-content:center;font-size:11px"
+          onclick="abrirEditarResultado('${p.id}')">✏️ Editar resultado</button>
+        <button class="btn btn-secondary" style="flex:1;justify-content:center;font-size:11px"
+          onclick="abrirEditarJugadoresPartido('${p.id}')">👥 Editar jugadores</button>
+        ${puedeUndo ? `<button class="undo-btn" style="align-self:center" onclick="deshacerPartido('${p.id}')">↩ Deshacer</button>` : ''}
+      </div>` : '';
+
+    return `
     <div class="partido-hist">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div class="partido-fecha">📅 ${p.fecha} · ${p.hora}</div>
-        ${idx === 0 ? `<button class="undo-btn" onclick="deshacerPartido('${p.id}')">↩ Deshacer</button>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px">
+        <div class="partido-fecha">📅 ${p.fecha}${p.hora ? ' · ' + p.hora : ''}</div>
+        ${manualBadge}
       </div>
       <div class="partido-resultado">
         <span style="color:var(--green)">${p.golesA}</span>
@@ -259,23 +317,27 @@ function renderHistorial() {
       </div>
       <div class="partido-equipos">
         <div style="color:var(--green)">
-          <div class="partido-team-label">🟢 Equipo A · Σ${p.sumA.toFixed(1)}</div>
-          ${p.equipoA.map(j => `<div class="partido-jugador">
-            ${(POS_CONFIG[j.pos || 'MED'] || POS_CONFIG.MED).icon} ${j.nombre}
+          <div class="partido-team-label">🟢 Equipo A · Σ${(p.sumA||0).toFixed(1)}</div>
+          ${(p.equipoA||[]).map(j => `<div class="partido-jugador">
+            ${(POS_CONFIG[j.pos||'MED']||POS_CONFIG.MED).icon} ${j.nombre}
           </div>`).join('')}
         </div>
         <div style="color:var(--blue)">
-          <div class="partido-team-label">🔵 Equipo B · Σ${p.sumB.toFixed(1)}</div>
-          ${p.equipoB.map(j => `<div class="partido-jugador">
-            ${(POS_CONFIG[j.pos || 'MED'] || POS_CONFIG.MED).icon} ${j.nombre}
+          <div class="partido-team-label">🔵 Equipo B · Σ${(p.sumB||0).toFixed(1)}</div>
+          ${(p.equipoB||[]).map(j => `<div class="partido-jugador">
+            ${(POS_CONFIG[j.pos||'MED']||POS_CONFIG.MED).icon} ${j.nombre}
           </div>`).join('')}
         </div>
       </div>
       <div class="partido-balance">
         ${tagBalance(p.balance_tag)} ${tagResultado(p.resultado_tag)}
-        <span style="color:var(--muted)"> · Dif. ${Math.abs(p.sumA - p.sumB).toFixed(1)} pts</span>
+        <span style="color:var(--muted)"> · Dif. ${Math.abs((p.sumA||0)-(p.sumB||0)).toFixed(1)} pts</span>
       </div>
-    </div>`).join('');
+      ${botonesAdmin}
+    </div>`;
+  }).join('');
+
+  lista.innerHTML = btnManual + cards;
 }
 
 // ===================== MODAL EDITAR JUGADOR =====================

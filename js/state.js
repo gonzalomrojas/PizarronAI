@@ -1,19 +1,25 @@
 // ===================== STATE =====================
-// Sprint 3: Auth con Supabase + grupo por usuario
+// Dev branch: roles de admin/member + permisos de votación
 
 let state = {
-  jugadores:  [],
-  convocados: [],
-  equipoA:    [],
-  equipoB:    [],
-  historial:  [],
+  jugadores:       [],
+  convocados:      [],
+  equipoA:         [],   // IDs
+  equipoB:         [],   // IDs
+  equipoASnapshot: [],   // Objetos completos — para restaurar la vista al volver al tab
+  equipoBSnapshot: [],   // Objetos completos
+  sumA:            0,
+  sumB:            0,
+  historial:       [],
 };
 
-let grupoId    = null;
-let currentUser = null;   // { id, email } del usuario logueado
-let authToken   = null;   // JWT de Supabase — se usa en cada request
+let grupoId     = null;
+let currentUser = null;   // { id, email }
+let authToken   = null;   // JWT Supabase
+let currentRole = null;   // 'admin' | 'member'
+let puedeVotar  = false;  // true si es admin O tiene permiso explícito
 
-// ===================== SYNC STATUS UI =====================
+// ===================== SYNC STATUS =====================
 
 function setSyncStatus(texto, color) {
   const el = document.getElementById('sync-status');
@@ -24,12 +30,11 @@ function setSynced()    { setSyncStatus('☁️ ' + new Date().toLocaleTimeStrin
 function setSyncError() { setSyncStatus('❌ Error', 'var(--red)'); }
 
 // ===================== SUPABASE REST =====================
-// Usa authToken si hay sesión activa, sino la anon key
 
 async function sbFetch(path, options = {}) {
-  const url     = SUPABASE_URL + '/rest/v1/' + path;
-  const bearer  = authToken || SUPABASE_KEY;
-  const prefer  = options.prefer !== undefined ? options.prefer : 'return=representation';
+  const url    = SUPABASE_URL + '/rest/v1/' + path;
+  const bearer = authToken || SUPABASE_KEY;
+  const prefer = options.prefer !== undefined ? options.prefer : 'return=representation';
   const headers = {
     'apikey':        SUPABASE_KEY,
     'Authorization': 'Bearer ' + bearer,
@@ -46,7 +51,6 @@ async function sbFetch(path, options = {}) {
   return res.json();
 }
 
-// Fetch para endpoints de Auth (/auth/v1/...)
 async function sbAuth(path, body) {
   const res = await fetch(SUPABASE_URL + '/auth/v1/' + path, {
     method:  'POST',
@@ -64,7 +68,6 @@ async function loginEmail(email, password) {
   const data = await sbAuth('token?grant_type=password', { email, password });
   authToken   = data.access_token;
   currentUser = { id: data.user.id, email: data.user.email };
-  // Guardar sesión en localStorage para persistir entre recargas
   localStorage.setItem(STORAGE_KEY + '_auth', JSON.stringify({
     token:  authToken,
     user:   currentUser,
@@ -75,7 +78,6 @@ async function loginEmail(email, password) {
 
 async function registrarEmail(email, password) {
   const data = await sbAuth('signup', { email, password });
-  // Supabase puede devolver sesión directamente si "confirm email" está desactivado
   if (data.access_token) {
     authToken   = data.access_token;
     currentUser = { id: data.user.id, email: data.user.email };
@@ -85,30 +87,28 @@ async function registrarEmail(email, password) {
       expiry: Date.now() + (data.expires_in * 1000),
     }));
   } else {
-    // Si pide confirmar email
     currentUser = { id: data.user?.id, email: data.user?.email };
   }
   return data;
 }
 
 async function cerrarSesion() {
-  // Llamar al endpoint de logout de Supabase
   if (authToken) {
     try {
       await fetch(SUPABASE_URL + '/auth/v1/logout', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + authToken },
       });
-    } catch(e) { console.warn('Error al hacer logout en Supabase:', e); }
+    } catch(e) {}
   }
-  // Limpiar todo el estado local
   authToken   = null;
   currentUser = null;
   grupoId     = null;
+  currentRole = null;
+  puedeVotar  = false;
   state       = { jugadores:[], convocados:[], equipoA:[], equipoB:[], historial:[] };
   localStorage.removeItem(STORAGE_KEY + '_auth');
   localStorage.removeItem(STORAGE_KEY + '_session');
-  // No borrar el grupo_id del storage — el usuario puede querer volver
 }
 
 function loadAuthFromStorage() {
@@ -116,7 +116,6 @@ function loadAuthFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY + '_auth');
     if (!raw) return false;
     const saved = JSON.parse(raw);
-    // Verificar que el token no esté expirado (con 5 min de margen)
     if (saved.expiry && Date.now() > saved.expiry - 300000) {
       localStorage.removeItem(STORAGE_KEY + '_auth');
       return false;
@@ -127,14 +126,15 @@ function loadAuthFromStorage() {
   } catch(e) { return false; }
 }
 
-// ===================== GRUPO POR USUARIO =====================
+// ===================== GRUPO + ROLES =====================
 
 async function cargarGrupoDelUsuario() {
   if (!currentUser) return null;
   try {
-    const rows = await sbFetch('user_grupos?user_id=eq.' + currentUser.id + '&select=grupo_id');
+    const rows = await sbFetch('user_grupos?user_id=eq.' + currentUser.id + '&select=grupo_id,role');
     if (rows && rows.length > 0) {
-      grupoId = rows[0].grupo_id;
+      grupoId     = rows[0].grupo_id;
+      currentRole = rows[0].role || 'member';
       return grupoId;
     }
     return null;
@@ -144,24 +144,86 @@ async function cargarGrupoDelUsuario() {
   }
 }
 
+// Crea grupo nuevo — el creador es admin
 async function guardarGrupoDelUsuario(gid) {
   if (!currentUser) return;
   await sbFetch('user_grupos', {
     method:  'POST',
     headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
-    body:    JSON.stringify({ user_id: currentUser.id, grupo_id: gid }),
+    body:    JSON.stringify({ user_id: currentUser.id, grupo_id: gid, role: 'admin' }),
   });
+  currentRole = 'admin';
 }
 
+// Unirse a grupo existente — siempre como member
 async function actualizarGrupoDelUsuario(gid) {
   if (!currentUser) return;
-  // Upsert: si ya tiene grupo lo reemplaza
   await sbFetch('user_grupos', {
     method:  'POST',
     headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
-    body:    JSON.stringify({ user_id: currentUser.id, grupo_id: gid }),
+    body:    JSON.stringify({ user_id: currentUser.id, grupo_id: gid, role: 'member' }),
   });
-  grupoId = gid;
+  grupoId     = gid;
+  currentRole = 'member';
+}
+
+// ===================== PERMISOS DE VOTACIÓN =====================
+
+// Carga si el usuario actual puede votar
+// Admin siempre puede. Member solo si tiene permiso explícito.
+async function cargarPermisoVotacion() {
+  if (currentRole === 'admin') { puedeVotar = true; return; }
+  try {
+    const rows = await sbFetch(
+      'voto_permisos?grupo_id=eq.' + grupoId + '&user_id=eq.' + currentUser.id + '&select=id'
+    );
+    puedeVotar = rows && rows.length > 0;
+  } catch(e) { puedeVotar = false; }
+}
+
+// Carga lista de todos los miembros del grupo con su permiso y email
+async function cargarMiembrosGrupo() {
+  // 1. Todos los users del grupo
+  const miembros = await sbFetch(
+    'user_grupos?grupo_id=eq.' + grupoId + '&select=user_id,role'
+  );
+  // 2. Permisos de votación actuales
+  const permisos = await sbFetch(
+    'voto_permisos?grupo_id=eq.' + grupoId + '&select=user_id'
+  );
+  const permisosSet = new Set((permisos || []).map(p => p.user_id));
+
+  // 3. Emails de los users via Auth Admin API — fallback: mostrar solo ID
+  //    Como no tenemos acceso Admin en el frontend, guardamos emails en una tabla auxiliar
+  //    Por ahora mostramos los primeros 8 chars del UUID como identificador
+  return (miembros || []).map(m => ({
+    user_id:    m.user_id,
+    role:       m.role || 'member',
+    puedeVotar: m.role === 'admin' || permisosSet.has(m.user_id),
+    esYo:       m.user_id === currentUser.id,
+    label:      m.user_id === currentUser.id ? currentUser.email : '...' + m.user_id.slice(-6),
+  }));
+}
+
+// Dar permiso de votación a un member
+async function darPermisoVotacion(userId) {
+  await sbFetch('voto_permisos', {
+    method:  'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body:    JSON.stringify({
+      grupo_id:     grupoId,
+      user_id:      userId,
+      otorgado_por: currentUser.id,
+    }),
+  });
+}
+
+// Quitar permiso de votación a un member
+async function quitarPermisoVotacion(userId) {
+  await sbFetch(
+    'voto_permisos?grupo_id=eq.' + grupoId + '&user_id=eq.' + userId,
+    { method: 'DELETE', prefer: '' }
+  );
 }
 
 // ===================== JUGADORES =====================
@@ -251,9 +313,13 @@ async function borrarPartido(id) {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY + '_session', JSON.stringify({
-    convocados: state.convocados,
-    equipoA:    state.equipoA,
-    equipoB:    state.equipoB,
+    convocados:      state.convocados,
+    equipoA:         state.equipoA,
+    equipoB:         state.equipoB,
+    equipoASnapshot: state.equipoASnapshot || [],
+    equipoBSnapshot: state.equipoBSnapshot || [],
+    sumA:            state.sumA || 0,
+    sumB:            state.sumB || 0,
   }));
 }
 
@@ -262,9 +328,13 @@ function loadSession() {
     const raw = localStorage.getItem(STORAGE_KEY + '_session');
     if (raw) {
       const s = JSON.parse(raw);
-      state.convocados = s.convocados || [];
-      state.equipoA    = s.equipoA    || [];
-      state.equipoB    = s.equipoB    || [];
+      state.convocados      = s.convocados      || [];
+      state.equipoA         = s.equipoA         || [];
+      state.equipoB         = s.equipoB         || [];
+      state.equipoASnapshot = s.equipoASnapshot || [];
+      state.equipoBSnapshot = s.equipoBSnapshot || [];
+      state.sumA            = s.sumA            || 0;
+      state.sumB            = s.sumB            || 0;
     }
   } catch(e) {}
 }
@@ -275,33 +345,20 @@ function getJugador(id)       { return state.jugadores.find(j => j.id === id) ||
 function defaultAttrs(pos, r) { const a = {}; POS_CONFIG[pos].attrs.forEach(x => { a[x.key] = r; }); return a; }
 function posBadge(pos)        { const c = POS_CONFIG[pos]||POS_CONFIG.MED; return `<span class="pos-badge badge-${pos}">${c.icon} ${c.label}</span>`; }
 function generarGrupoId()     { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join(''); }
+function esAdmin()            { return currentRole === 'admin'; }
 
 // ===================== INIT =====================
 
 async function initApp() {
   setSyncStatus('⏳ Conectando...', 'var(--yellow)');
-
-  // 1. Verificar si hay sesión guardada válida
   const tieneAuth = loadAuthFromStorage();
+  if (!tieneAuth) { mostrarLogin(); return; }
 
-  if (!tieneAuth) {
-    // No hay sesión → mostrar pantalla de login
-    mostrarLogin();
-    return;
-  }
-
-  // 2. Tiene sesión → cargar su grupo
   setSyncStatus('⏳ Cargando...', 'var(--yellow)');
   try {
     const gid = await cargarGrupoDelUsuario();
-    if (!gid) {
-      // Tiene cuenta pero no tiene grupo asignado → onboarding de grupo
-      mostrarOnboarding();
-      return;
-    }
-    // 3. Tiene grupo → cargar datos
-    await cargarJugadores();
-    await cargarHistorial();
+    if (!gid) { mostrarOnboarding(); return; }
+    await Promise.all([cargarJugadores(), cargarHistorial(), cargarPermisoVotacion()]);
     loadSession();
     setSynced();
     actualizarHeaderUsuario();

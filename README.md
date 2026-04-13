@@ -103,12 +103,10 @@ Supabase (Backend as a Service)
 
 ---
 
-
 ## Estructura del proyecto
 
 ```
 PizarronAI/
-
 │
 ├── index.html                 ← Punto de entrada. Contiene las 3 pantallas:
 │                                  Login, Onboarding de grupo, App principal
@@ -203,12 +201,10 @@ Ver guía detallada en [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
 
 ---
 
-
 ## Roadmap
 
 | Sprint | Estado | Descripción |
 |--------|--------|-------------|
-
 | Sprint 1 | ✅ Completo | Algoritmo SA, rating con decaimiento, undo, wizard de progreso |
 | Sprint 2 | ✅ Completo | Supabase sync, sistema de grupos compartidos |
 | Sprint 3 | ✅ Completo | Login/registro, sesiones JWT, cambio de grupo, cerrar sesión |
@@ -217,11 +213,9 @@ Ver guía detallada en [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
 
 ---
 
-
 ## Convención de commits
 
 ```
-
 feat:     nueva funcionalidad
 fix:      corrección de bug
 refactor: reorganización sin cambio de comportamiento
@@ -244,4 +238,3 @@ git commit -m "refactor: separar state.js en módulos independientes"
 **Gonzalo M. Rojas**  
 Proyecto personal — Pizarrón AI  
 [github.com/gonzalomrojas](https://github.com/gonzalomrojas)
-
