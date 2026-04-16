@@ -114,56 +114,6 @@
       background: var(--green-dark);
       color: #fff;
     }
-
-    /* ---- MVP ---- */
-    .mvp-badge {
-      background: linear-gradient(135deg, #2a2000, #3a2a00);
-      border: 1px solid var(--yellow);
-      border-radius: 8px; padding: 8px 12px;
-      font-size: 13px; color: var(--yellow);
-      margin-top: 10px; text-align: center;
-    }
-    .mvp-section {
-      background: var(--surface); border: 1px solid #4a3a00;
-      border-radius: 10px; padding: 12px; margin-top: 10px;
-    }
-
-    /* ---- STATS ---- */
-    .stats-highlights {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
-    }
-    .stat-highlight {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px; text-align: center;
-    }
-    .stat-highlight-icon  { font-size: 24px; margin-bottom: 4px; }
-    .stat-highlight-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-    .stat-highlight-val   { font-weight: 700; font-size: 14px; color: var(--text); margin-top: 3px; }
-    .stat-highlight-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
-
-    .stat-card {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 10px; padding: 11px 13px;
-      display: flex; align-items: center; gap: 10px;
-      margin-bottom: 7px; cursor: pointer; transition: border-color 0.2s;
-    }
-    .stat-card:hover { border-color: var(--green); }
-    .stat-card-rank {
-      font-family: 'Bebas Neue'; font-size: 22px; color: var(--muted);
-      min-width: 22px; text-align: center;
-    }
-    .stats-grid-4 {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-    }
-    .stats-grid-3 {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
-    }
-    .stat-mini {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px; text-align: center;
-    }
-    .stat-mini-val   { font-family: 'Bebas Neue'; font-size: 22px; color: var(--text); }
-    .stat-mini-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
   </style>
 </head>
 <body>
@@ -252,7 +202,6 @@
     <button class="tab"         onclick="goTab('equipos')">⚖️ Equipos</button>
     <button class="tab" id="tab-btn-votar" onclick="goTab('votar')">⭐ Votar</button>
     <button class="tab"         onclick="goTab('historial')">📋 Historial</button>
-    <button class="tab"         onclick="goTab('stats')">📊 Stats</button>
   </div>
 
   <!-- JUGADORES -->
@@ -323,11 +272,6 @@
   <div id="tab-historial" class="view">
     <div class="section-title">Historial de partidos</div>
     <div id="lista-historial"></div>
-  </div>
-
-  <!-- STATS -->
-  <div id="tab-stats" class="view">
-    <!-- Se rellena en renderStats() -->
   </div>
 
 </div><!-- /screen-app -->
@@ -439,16 +383,6 @@
     <button class="btn btn-primary btn-full" onclick="guardarCambiosJugadoresPartido()" style="margin-top:14px">
       💾 Guardar cambios
     </button>
-  </div>
-</div>
-
-
-<!-- MODAL: STATS JUGADOR -->
-<div class="modal-overlay" id="modal-stats">
-  <div class="modal">
-    <button class="modal-close" onclick="cerrarStats()">✕</button>
-    <div class="modal-title" id="modal-stats-titulo">Estadísticas</div>
-    <div id="modal-stats-cuerpo"></div>
   </div>
 </div>
 

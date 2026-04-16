@@ -308,9 +308,6 @@ function partidoToRow(p) {
     balance_tag: p.balance_tag, resultado_tag: p.resultado_tag,
     equipo_a: p.equipoA, equipo_b: p.equipoB,
     snapshot_jugadores: p.snapshotJugadores || null,
-    mvp_abierto:        p.mvp_abierto        || false,
-    mvp_jugador_id:     p.mvp_jugador_id     || null,
-    mvp_jugador_nombre: p.mvp_jugador_nombre || null,
   };
 }
 
@@ -322,10 +319,6 @@ function rowToPartido(row) {
     balance_tag: row.balance_tag, resultado_tag: row.resultado_tag,
     equipoA: row.equipo_a || [], equipoB: row.equipo_b || [],
     snapshotJugadores: row.snapshot_jugadores || null,
-    // MVP
-    mvp_abierto:        row.mvp_abierto        || false,
-    mvp_jugador_id:     row.mvp_jugador_id     || null,
-    mvp_jugador_nombre: row.mvp_jugador_nombre || null,
   };
 }
 
@@ -383,133 +376,6 @@ function defaultAttrs(pos, r) { const a = {}; POS_CONFIG[pos].attrs.forEach(x =>
 function posBadge(pos)        { const c = POS_CONFIG[pos]||POS_CONFIG.MED; return `<span class="pos-badge badge-${pos}">${c.icon} ${c.label}</span>`; }
 function generarGrupoId()     { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join(''); }
 function esAdmin()            { return currentRole === 'admin'; }
-
-
-// ===================== VOTACIÓN MVP =====================
-
-// Abrir votación MVP para un partido (solo admin)
-async function abrirVotacionMVP(partidoId) {
-  await sbFetch('partidos?id=eq.' + partidoId + '&grupo_id=eq.' + grupoId, {
-    method: 'PATCH',
-    prefer: 'return=representation',
-    body:   JSON.stringify({ mvp_abierto: true, mvp_jugador_id: null, mvp_jugador_nombre: null }),
-  });
-  const idx = state.historial.findIndex(p => p.id === partidoId);
-  if (idx !== -1) { state.historial[idx].mvp_abierto = true; state.historial[idx].mvp_jugador_id = null; }
-}
-
-// Cerrar votación MVP y grabar ganador (solo admin)
-async function cerrarVotacionMVP(partidoId) {
-  // Calcular ganador contando votos
-  const votos = await sbFetch('votos_mvp?partido_id=eq.' + partidoId + '&select=jugador_id');
-  if (!votos || !votos.length) throw new Error('No hay votos todavía.');
-
-  // Contar votos por jugador
-  const conteo = {};
-  votos.forEach(v => { conteo[v.jugador_id] = (conteo[v.jugador_id] || 0) + 1; });
-  const ganadorId = Object.entries(conteo).sort((a,b) => b[1]-a[1])[0][0];
-
-  // Buscar nombre del jugador
-  const partido   = state.historial.find(p => p.id === partidoId);
-  const todosJug  = [...(partido?.equipoA||[]), ...(partido?.equipoB||[])];
-  const ganadorNombre = todosJug.find(j => j.id === ganadorId)?.nombre || ganadorId;
-
-  await sbFetch('partidos?id=eq.' + partidoId + '&grupo_id=eq.' + grupoId, {
-    method: 'PATCH',
-    prefer: 'return=representation',
-    body:   JSON.stringify({ mvp_abierto: false, mvp_jugador_id: ganadorId, mvp_jugador_nombre: ganadorNombre }),
-  });
-  if (partido) { partido.mvp_abierto = false; partido.mvp_jugador_id = ganadorId; partido.mvp_jugador_nombre = ganadorNombre; }
-  return { ganadorId, ganadorNombre, conteo };
-}
-
-// Votar MVP (todos los miembros del grupo)
-async function votarMVP(partidoId, jugadorId) {
-  await sbFetch('votos_mvp', {
-    method: 'POST',
-    headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
-    body:   JSON.stringify({ partido_id: partidoId, grupo_id: grupoId, voter_id: currentUser.id, jugador_id: jugadorId }),
-  });
-}
-
-// Verificar si el usuario ya votó en este partido
-async function yaVoteMVP(partidoId) {
-  const rows = await sbFetch('votos_mvp?partido_id=eq.' + partidoId + '&voter_id=eq.' + currentUser.id + '&select=id');
-  return rows && rows.length > 0;
-}
-
-// Cargar conteo de votos de un partido
-async function cargarVotosMVP(partidoId) {
-  const rows = await sbFetch('votos_mvp?partido_id=eq.' + partidoId + '&select=jugador_id');
-  const conteo = {};
-  (rows||[]).forEach(v => { conteo[v.jugador_id] = (conteo[v.jugador_id] || 0) + 1; });
-  return conteo;
-}
-
-// Recargar historial desde Supabase (para ver votos en tiempo real)
-async function refrescarHistorial() {
-  await cargarHistorial();
-}
-
-// ===================== ESTADÍSTICAS =====================
-
-// Calcula stats completas de un jugador a partir del historial
-function calcularStatsJugador(jugadorId) {
-  const stats = {
-    partidos:  0,
-    ganados:   0,
-    perdidos:  0,
-    empatados: 0,
-    mvps:      0,
-    rachaActual:   0,
-    rachaMejor:    0,
-    evolucionRating: [],  // últimos 10 partidos [{ fecha, rating }]
-  };
-
-  // Ordenar historial de más viejo a más nuevo para calcular racha
-  const historialOrdenado = [...state.historial].reverse();
-
-  let rachaTemp  = 0;
-  let rachaActiva = true;
-
-  historialOrdenado.forEach(p => {
-    const enA = (p.equipoA||[]).some(j => j.id === jugadorId);
-    const enB = (p.equipoB||[]).some(j => j.id === jugadorId);
-    if (!enA && !enB) return;
-
-    stats.partidos++;
-
-    // Resultado
-    const miEquipo = enA ? 'A' : 'B';
-    if (p.ganador === 'Empate')         stats.empatados++;
-    else if (p.ganador === miEquipo)    { stats.ganados++;  rachaTemp++; }
-    else                                { stats.perdidos++; if (rachaActiva) { stats.rachaActual = rachaTemp; rachaActiva = false; } rachaTemp = 0; }
-
-    if (rachaTemp > stats.rachaMejor) stats.rachaMejor = rachaTemp;
-
-    // MVP
-    if (p.mvp_jugador_id === jugadorId) stats.mvps++;
-
-    // Evolución de rating — tomar rating del snapshot del partido
-    const snap = (p.snapshotJugadores||[]).find(j => j.id === jugadorId);
-    if (snap && stats.evolucionRating.length < 10) {
-      stats.evolucionRating.push({ fecha: p.fecha, rating: snap.rating });
-    }
-  });
-
-  // Si nunca perdió en el historial disponible, racha activa es rachaTemp
-  if (rachaActiva) stats.rachaActual = rachaTemp;
-
-  return stats;
-}
-
-// Stats generales del grupo (para rankings)
-function calcularStatsGrupo() {
-  return state.jugadores.map(j => ({
-    ...j,
-    stats: calcularStatsJugador(j.id),
-  })).sort((a, b) => b.rating - a.rating);
-}
 
 // ===================== INIT =====================
 
