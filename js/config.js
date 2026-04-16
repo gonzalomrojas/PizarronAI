@@ -54,3 +54,6 @@ const RECENT_WEIGHT = 3;
 const SA_ITERATIONS   = 400;
 const SA_TEMP_INITIAL = 2.0;
 const SA_COOLING      = 0.97;
+
+window.SUPABASE_URL  = SUPABASE_URL;   // ya las tenés en config.js
+window.SUPABASE_ANON = SUPABASE_ANON;
