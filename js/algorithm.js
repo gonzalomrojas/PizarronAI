@@ -151,10 +151,14 @@ function renderEquipos(teamA, teamB, sumA, sumB, nArqs, totalJugadores) {
     <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--muted)">
       ${totalJugadores} jugadores · ${teamA.length} vs ${teamB.length}
     </div>
-    <div style="display:flex;gap:8px;margin-top:10px">
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button class="btn btn-secondary" style="flex:1;justify-content:center" onclick="generarEquipos()">🔀 Mezclar</button>
-      <button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="goTab('votar')">⭐ Votar</button>
-    </div>`;
+      <button class="btn btn-yellow"    style="flex:1;justify-content:center" onclick="goTab('votar')">⭐ Votar</button>
+    </div>
+    <button class="btn" style="width:100%;justify-content:center;margin-top:6px;background:#25D366;color:#fff;font-weight:700"
+      onclick="compartirEquiposPorWhatsApp()">
+      📲 Compartir por WhatsApp
+    </button>`;
 
   // Sección de resultado — solo visible para admin, persiste al volver al tab
   const seccion = document.getElementById('seccion-resultado');
