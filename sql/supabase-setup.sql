@@ -1,5 +1,5 @@
 -- =====================================================
--- PichanguApp — Setup de base de datos en Supabase
+-- PizarronAI — Setup de base de datos en Supabase
 -- Ejecutar en: Supabase Dashboard → SQL Editor → New query
 -- =====================================================
 

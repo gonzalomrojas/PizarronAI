@@ -86,4 +86,3 @@ npx serve .
 | Sprint 3 | ✅ | Login, roles admin/member, permisos de votación |
 | Sprint 4 | 📋 | Estadísticas, gráfico de evolución de rating |
 | Sprint 5 | 📋 | RSVP, compartir por WhatsApp |
-actualizacion del sql

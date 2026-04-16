@@ -19,9 +19,3 @@ Thumbs.db
 .idea/
 *.suo
 *.user
-
-# Ignorar el dashboard de admin local
-admin-dashboard.html
-# Ignorar archivos de variables de entorno
-.env
-.env.local

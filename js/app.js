@@ -634,6 +634,134 @@ async function guardarCambiosJugadoresPartido() {
   } catch(e) { setSyncError(); alert('Error: ' + e.message); }
 }
 
+
+// ===================== MVP — ACCIONES =====================
+
+async function toggleVotacionMVP(partidoId, abrir) {
+  if (!esAdmin()) { alert('Solo el admin puede gestionar la votación MVP.'); return; }
+  const btn = document.getElementById('btn-mvp-toggle-' + partidoId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+  try {
+    if (abrir) {
+      await abrirVotacionMVP(partidoId);
+      alert('✅ Votación MVP abierta. Los miembros ya pueden votar.');
+    } else {
+      const resultado = await cerrarVotacionMVP(partidoId);
+      alert('🏆 MVP: ' + resultado.ganadorNombre + '
+' +
+            Object.entries(resultado.conteo)
+              .sort((a,b)=>b[1]-a[1])
+              .map(([id, n]) => {
+                const p = state.historial.find(h => [...(h.equipoA||[]),...(h.equipoB||[])].some(j=>j.id===id));
+                const nombre = p ? [...(p.equipoA||[]),...(p.equipoB||[])].find(j=>j.id===id)?.nombre : id;
+                return (nombre||id) + ': ' + n + ' voto' + (n!==1?'s':'');
+              }).join('
+'));
+    }
+    await refrescarHistorial();
+    renderHistorial();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+  if (btn) { btn.disabled = false; }
+}
+
+async function submitVotoMVP(partidoId) {
+  const sel = document.getElementById('mvp-select-' + partidoId);
+  if (!sel || !sel.value) { alert('Elegí un jugador.'); return; }
+  if (sel.value === currentUser.id) { alert('No podés votarte a vos mismo.'); return; }
+
+  const btn = document.getElementById('btn-votar-mvp-' + partidoId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Votando...'; }
+
+  try {
+    await votarMVP(partidoId, sel.value);
+    // Recargar conteo
+    const conteo = await cargarVotosMVP(partidoId);
+    renderResultadoVotosMVP(partidoId, conteo, true);
+  } catch(e) {
+    // Unique constraint = ya votó
+    if (e.message.includes('23505') || e.message.includes('unique')) {
+      renderResultadoVotosMVP(partidoId, await cargarVotosMVP(partidoId), true);
+    } else {
+      alert('Error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '🏆 Votar MVP'; }
+    }
+  }
+}
+
+function renderResultadoVotosMVP(partidoId, conteo, yaVote) {
+  const contenedor = document.getElementById('mvp-votos-' + partidoId);
+  if (!contenedor) return;
+  const partido  = state.historial.find(p => p.id === partidoId);
+  const jugadores = [...(partido?.equipoA||[]),...(partido?.equipoB||[])];
+  const total    = Object.values(conteo).reduce((a,b)=>a+b, 0);
+
+  if (!total) { contenedor.innerHTML = '<div style="font-size:12px;color:var(--muted)">Sin votos todavía.</div>'; return; }
+
+  contenedor.innerHTML = jugadores
+    .filter(j => conteo[j.id])
+    .sort((a,b) => (conteo[b.id]||0) - (conteo[a.id]||0))
+    .map(j => {
+      const n   = conteo[j.id] || 0;
+      const pct = Math.round((n/total)*100);
+      return `<div style="margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+          <span>${j.nombre}</span>
+          <span style="color:var(--yellow);font-family:'Bebas Neue'">${n} voto${n!==1?'s':''}</span>
+        </div>
+        <div style="height:4px;background:var(--border);border-radius:2px">
+          <div style="height:4px;width:${pct}%;background:var(--yellow);border-radius:2px;transition:width 0.4s"></div>
+        </div>
+      </div>`;
+    }).join('') +
+    (yaVote ? '<div style="font-size:11px;color:var(--green);margin-top:6px">✅ Ya votaste</div>' : '');
+}
+
+async function abrirVotosMVPEnPartido(partidoId) {
+  const conteo  = await cargarVotosMVP(partidoId);
+  const yaVote  = await yaVoteMVP(partidoId);
+  renderResultadoVotosMVP(partidoId, conteo, yaVote);
+
+  // Mostrar/ocultar form de voto
+  const form = document.getElementById('mvp-form-' + partidoId);
+  if (form) form.style.display = yaVote ? 'none' : 'block';
+}
+
+// ===================== WHATSAPP =====================
+
+function compartirEquiposPorWhatsApp() {
+  const A = state.equipoASnapshot || [];
+  const B = state.equipoBSnapshot || [];
+  if (!A.length || !B.length) { alert('Primero generá los equipos.'); return; }
+
+  const sumA = (state.sumA || 0).toFixed(1);
+  const sumB = (state.sumB || 0).toFixed(1);
+  const url  = 'https://gonzalomrojas.github.io/PizarronAI/';
+
+  const msg = '⚽ *PIZARRÓN AI — Equipos de hoy*
+
+' +
+    '🟢 *EQUIPO A* (Σ' + sumA + ' pts)
+' +
+    A.map(j => (POS_CONFIG[j.pos]||POS_CONFIG.MED).icon + ' ' + j.nombre).join('
+') + '
+
+' +
+    '🔵 *EQUIPO B* (Σ' + sumB + ' pts)
+' +
+    B.map(j => (POS_CONFIG[j.pos]||POS_CONFIG.MED).icon + ' ' + j.nombre).join('
+') + '
+
+' +
+    '🏆 Votá el MVP después del partido:
+' + url;
+
+  const waUrl = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(waUrl, '_blank');
+}
+
 // ===================== INIT =====================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -645,6 +773,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('modal-partido-manual').addEventListener('click', function(e) {
     if (e.target === this) cerrarModalManual();
+  });
+  document.getElementById('modal-stats').addEventListener('click', function(e) {
+    if (e.target === this) cerrarStats();
   });
   document.getElementById('modal-editar-resultado').addEventListener('click', function(e) {
     if (e.target === this) cerrarEditarResultado();

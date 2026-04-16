@@ -145,20 +145,6 @@ ALTER TABLE voto_permisos
   ALTER COLUMN created_at SET NOT NULL,
   ALTER COLUMN created_at SET DEFAULT now();
 
--- Paso 1: Limpiar los NULL primero
-UPDATE user_grupos
-SET role = 'member'
-WHERE role IS NULL;
-
--- Paso 2: Verificar que no queden NULL
-SELECT role, COUNT(*) as cantidad
-FROM user_grupos
-GROUP BY role;
--- Ver qué valores tiene role actualmente
-SELECT role, COUNT(*) as cantidad
-FROM user_grupos
-GROUP BY role
-ORDER BY cantidad DESC;
 
 -- ----------------------------------------------------------------
 -- FIX 5: Índices faltantes
@@ -196,28 +182,7 @@ CREATE INDEX IF NOT EXISTS idx_voto_permisos_grupo_user
 CREATE INDEX IF NOT EXISTS idx_voto_permisos_grupo
   ON voto_permisos (grupo_id);
 
--- Limpiar todas las políticas antes de recrearlas
-DROP POLICY IF EXISTS "jugadores_select"      ON jugadores;
-DROP POLICY IF EXISTS "jugadores_insert"      ON jugadores;
-DROP POLICY IF EXISTS "jugadores_update"      ON jugadores;
-DROP POLICY IF EXISTS "jugadores_delete"      ON jugadores;
 
-DROP POLICY IF EXISTS "partidos_select"       ON partidos;
-DROP POLICY IF EXISTS "partidos_insert"       ON partidos;
-DROP POLICY IF EXISTS "partidos_update"       ON partidos;
-DROP POLICY IF EXISTS "partidos_delete"       ON partidos;
-
-DROP POLICY IF EXISTS "user_grupos_select"    ON user_grupos;
-DROP POLICY IF EXISTS "user_grupos_insert"    ON user_grupos;
-DROP POLICY IF EXISTS "user_grupos_update"    ON user_grupos;
-
-DROP POLICY IF EXISTS "user_profiles_select"  ON user_profiles;
-DROP POLICY IF EXISTS "user_profiles_insert"  ON user_profiles;
-DROP POLICY IF EXISTS "user_profiles_update"  ON user_profiles;
-
-DROP POLICY IF EXISTS "voto_permisos_select"  ON voto_permisos;
-DROP POLICY IF EXISTS "voto_permisos_insert"  ON voto_permisos;
-DROP POLICY IF EXISTS "voto_permisos_delete"  ON voto_permisos;
 -- ----------------------------------------------------------------
 -- FIX 6: RLS — reemplazar política FOR ALL por políticas granulares
 -- ----------------------------------------------------------------
