@@ -1,11 +1,11 @@
 // ===================== SUPABASE =====================
-const SUPABASE_URL = 'https://llyqmflurzduilnejrjy.supabase.co';
+const SUPABASE_URL  = 'https://llyqmflurzduilnejrjy.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_V74ZPUv17PaQAszAsAO5Gw_H2y65Hsq';
 
 // ===================== STORAGE KEYS =====================
 const STORAGE_KEY       = 'pizarron_v1';
 const GRUPO_STORAGE_KEY = 'pizarron_grupo_id';
-
+const SUPABASE_ANON = SUPABASE_KEY;   
 // ===================== POSICIONES =====================
 const POS_CONFIG = {
   ARQ: {
