@@ -200,25 +200,60 @@ async function abrirPanelMiembros() {
     const miembros = await cargarMiembrosGrupo();
     if (!miembros.length) { cuerpo.innerHTML = '<div class="empty">No hay otros miembros en el grupo todavía.</div>'; return; }
 
-    cuerpo.innerHTML = miembros.map(m => `
-      <div class="miembro-row">
-        <div class="miembro-info">
-          <span class="miembro-label">${m.label}${m.esYo ? ' <em style="color:var(--muted)">(vos)</em>' : ''}</span>
-          <span class="role-chip ${m.role === 'admin' ? 'role-admin' : 'role-member'}">
-            ${m.role === 'admin' ? '👑 Admin' : '👤 Member'}
-          </span>
-        </div>
-        ${!m.esYo && m.role !== 'admin' ? `
-          <div class="miembro-accion">
-            <span style="font-size:11px;color:var(--muted);margin-right:8px">
-              ${m.puedeVotar ? '⭐ Puede votar' : '🔒 Sin permiso'}
+    // Opciones de jugadores sin vincular para el select
+    const jugsSinVincular = state.jugadores.filter(j => !j.auth_user_id);
+
+    cuerpo.innerHTML = miembros.map(m => {
+      const vinc      = m.jugadorVinc;
+      const optsJugs  = jugsSinVincular
+        .concat(vinc ? [vinc] : [])   // incluir el ya vinculado en las opciones
+        .sort((a,b) => a.nombre.localeCompare(b.nombre))
+        .map(j => `<option value="${j.id}" ${vinc && j.id===vinc.id ? 'selected' : ''}>
+          ${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre}
+        </option>`).join('');
+
+      const seccionVinc = m.role !== 'admin' ? `
+        <div class="miembro-vinc" style="margin-top:8px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:5px">
+            Jugador vinculado: <strong style="color:var(--text)">${vinc ? vinc.nombre : 'Ninguno'}</strong>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="vinc-sel-${m.user_id}" style="flex:1;font-size:12px;padding:6px 8px">
+              <option value="">— Sin vincular —</option>
+              ${optsJugs}
+            </select>
+            <button class="btn-permiso btn-dar" style="white-space:nowrap"
+              onclick="guardarVinculacion('${m.user_id}', this)">
+              ${vinc ? '🔄 Cambiar' : '🔗 Vincular'}
+            </button>
+            ${vinc ? `<button class="btn-permiso btn-quitar"
+              onclick="quitarVinculacion('${vinc.id}', this)">✕</button>` : ''}
+          </div>
+        </div>` : '';
+
+      return `
+      <div class="miembro-row" style="flex-direction:column;align-items:stretch">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="miembro-info" style="flex:1">
+            <span class="miembro-label">${m.label}${m.esYo ? ' <em style="color:var(--muted)">(vos)</em>' : ''}</span>
+            <span class="role-chip ${m.role === 'admin' ? 'role-admin' : 'role-member'}">
+              ${m.role === 'admin' ? '👑 Admin' : '👤 Member'}
             </span>
-            ${m.puedeVotar
-              ? `<button class="btn-permiso btn-quitar" onclick="togglePermiso('${m.user_id}', false, this)">Quitar permiso</button>`
-              : `<button class="btn-permiso btn-dar"   onclick="togglePermiso('${m.user_id}', true,  this)">Dar permiso</button>`
-            }
-          </div>` : ''}
-      </div>`).join('');
+          </div>
+          ${!m.esYo && m.role !== 'admin' ? `
+            <div class="miembro-accion">
+              <span style="font-size:11px;color:var(--muted);margin-right:6px">
+                ${m.puedeVotar ? '⭐ Puede votar' : '🔒 Sin permiso'}
+              </span>
+              ${m.puedeVotar
+                ? `<button class="btn-permiso btn-quitar" onclick="togglePermiso('${m.user_id}', false, this)">Quitar</button>`
+                : `<button class="btn-permiso btn-dar"    onclick="togglePermiso('${m.user_id}', true,  this)">Dar permiso</button>`
+              }
+            </div>` : ''}
+        </div>
+        ${seccionVinc}
+      </div>`;
+    }).join('');
   } catch(e) {
     cuerpo.innerHTML = '<div style="color:var(--red);font-size:13px">Error al cargar miembros.</div>';
   }
@@ -672,7 +707,10 @@ async function toggleVotacionMVP(partidoId, abrir) {
 async function submitVotoMVP(partidoId) {
   const sel = document.getElementById('mvp-select-' + partidoId);
   if (!sel || !sel.value) { alert('Elegí un jugador.'); return; }
-  if (sel.value === currentUser.id) { alert('No podés votarte a vos mismo.'); return; }
+  // Verificar auto-voto: comparar auth_user_id del jugador seleccionado con el usuario actual
+  if (esJugadorPropio(sel.value)) {
+    alert('No podés votarte a vos mismo.'); return;
+  }
 
   const btn = document.getElementById('btn-votar-mvp-' + partidoId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Votando...'; }
@@ -761,6 +799,40 @@ function compartirEquiposPorWhatsApp() {
 
   const waUrl = 'https://wa.me/?text=' + encodeURIComponent(msg);
   window.open(waUrl, '_blank');
+}
+
+
+async function guardarVinculacion(userId, btn) {
+  const sel = document.getElementById('vinc-sel-' + userId);
+  if (!sel) return;
+  const jugadorId = sel.value;
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    if (!jugadorId) {
+      // Desvincular: encontrar jugador actual vinculado a este user
+      const jugActual = state.jugadores.find(j => j.auth_user_id === userId);
+      if (jugActual) await desvincularJugador(jugActual.id);
+    } else {
+      await vincularJugadorAUsuario(jugadorId, userId);
+    }
+    await abrirPanelMiembros();   // refrescar panel
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '🔗 Vincular';
+    alert('Error: ' + e.message);
+  }
+}
+
+async function quitarVinculacion(jugadorId, btn) {
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    await desvincularJugador(jugadorId);
+    await abrirPanelMiembros();   // refrescar panel
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '✕';
+    alert('Error al desvincular: ' + e.message);
+  }
 }
 
 // ===================== INIT =====================

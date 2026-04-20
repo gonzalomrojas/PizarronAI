@@ -297,10 +297,17 @@ function renderHistorial() {
     const mvpBadge = p.mvp_jugador_nombre
       ? `<div class="mvp-badge">🏆 MVP: <strong>${p.mvp_jugador_nombre}</strong></div>` : '';
 
-    // Votación abierta: form para votar
+    // Votación abierta: filtrar al jugador propio del usuario actual
+    // Buscar si el usuario actual tiene un jugador vinculado en este partido
     const todosJugPart = [...(p.equipoA||[]),...(p.equipoB||[])];
+    const jugPropioId  = (() => {
+      if (typeof getJugadorDelUsuarioActual !== 'function') return null;
+      const jp = getJugadorDelUsuarioActual();
+      // Solo filtrar si el jugador propio está en este partido
+      return jp && todosJugPart.some(j => j.id === jp.id) ? jp.id : null;
+    })();
     const opcionesJug  = todosJugPart
-      .filter(j => j.id !== currentUser?.id)
+      .filter(j => j.id !== jugPropioId)   // excluir jugador propio si está en el partido
       .map(j => `<option value="${j.id}">${j.nombre}</option>`).join('');
 
     const seccionMVP = p.mvp_jugador_nombre

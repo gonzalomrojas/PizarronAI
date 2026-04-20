@@ -224,14 +224,20 @@ async function cargarMiembrosGrupo() {
     console.warn('[miembros] No se pudieron cargar emails:', e);
   }
 
+  // 4. Ver qué jugadores ya están vinculados
+  const vinculacionMap = {};
+  state.jugadores.forEach(j => {
+    if (j.auth_user_id) vinculacionMap[j.auth_user_id] = j;
+  });
+
   return miembros.map(m => ({
-    user_id:    m.user_id,
-    role:       m.role || 'member',
-    puedeVotar: m.role === 'admin' || permisosSet.has(m.user_id),
-    esYo:       m.user_id === currentUser.id,
-    // Mostrar email real si está disponible, si no el email propio, si no fragmento del ID
-    label:      emailMap[m.user_id] || 
-                (m.user_id === currentUser.id ? currentUser.email : '···' + m.user_id.slice(-8)),
+    user_id:       m.user_id,
+    role:          m.role || 'member',
+    puedeVotar:    m.role === 'admin' || permisosSet.has(m.user_id),
+    esYo:          m.user_id === currentUser.id,
+    label:         emailMap[m.user_id] ||
+                   (m.user_id === currentUser.id ? currentUser.email : '···' + m.user_id.slice(-8)),
+    jugadorVinc:   vinculacionMap[m.user_id] || null,  // jugador vinculado a esta cuenta
   }));
 }
 
@@ -265,6 +271,7 @@ function jugadorToRow(j) {
     historial_votos: j.historial_votos || [j.rating],
     historial_votos_attrs: j.historial_votos_attrs || {},
     partidos: j.partidos || 0, votos_count: j.votos_count || 1,
+    auth_user_id: j.auth_user_id || null,
   };
 }
 
@@ -274,6 +281,7 @@ function rowToJugador(row) {
     attrs: row.attrs || {}, historial_votos: row.historial_votos || [row.rating],
     historial_votos_attrs: row.historial_votos_attrs || {},
     partidos: row.partidos || 0, votos_count: row.votos_count || 1,
+    auth_user_id: row.auth_user_id || null,
   };
 }
 
@@ -384,6 +392,56 @@ function posBadge(pos)        { const c = POS_CONFIG[pos]||POS_CONFIG.MED; retur
 function generarGrupoId()     { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join(''); }
 function esAdmin()            { return currentRole === 'admin'; }
 
+
+
+// ===================== VINCULACIÓN JUGADOR ↔ CUENTA =====================
+// El admin puede asociar un jugador existente con una cuenta de usuario.
+// Esto permite que la app sepa quién es quién y evite el auto-voto en MVP.
+
+// Vincular jugador con una cuenta de usuario (solo admin)
+async function vincularJugadorAUsuario(jugadorId, authUserId) {
+  // Verificar que ese usuario no esté ya vinculado a otro jugador en el grupo
+  const existente = state.jugadores.find(
+    j => j.auth_user_id === authUserId && j.id !== jugadorId
+  );
+  if (existente) {
+    throw new Error(
+      'Ese usuario ya está vinculado al jugador "' + existente.nombre + '".'
+    );
+  }
+  await sbFetch('jugadores?id=eq.' + jugadorId + '&grupo_id=eq.' + grupoId, {
+    method: 'PATCH',
+    prefer: 'return=representation',
+    body:   JSON.stringify({ auth_user_id: authUserId }),
+  });
+  // Actualizar state local
+  const j = state.jugadores.find(p => p.id === jugadorId);
+  if (j) j.auth_user_id = authUserId;
+}
+
+// Desvincular jugador de su cuenta
+async function desvincularJugador(jugadorId) {
+  await sbFetch('jugadores?id=eq.' + jugadorId + '&grupo_id=eq.' + grupoId, {
+    method: 'PATCH',
+    prefer: 'return=representation',
+    body:   JSON.stringify({ auth_user_id: null }),
+  });
+  const j = state.jugadores.find(p => p.id === jugadorId);
+  if (j) j.auth_user_id = null;
+}
+
+// Obtener el jugador vinculado al usuario actual (si existe)
+function getJugadorDelUsuarioActual() {
+  if (!currentUser) return null;
+  return state.jugadores.find(j => j.auth_user_id === currentUser.id) || null;
+}
+
+// Retorna true si el jugador está vinculado al usuario actual
+function esJugadorPropio(jugadorId) {
+  if (!currentUser) return false;
+  const j = state.jugadores.find(p => p.id === jugadorId);
+  return j && j.auth_user_id === currentUser.id;
+}
 
 // ===================== VOTACIÓN MVP =====================
 
