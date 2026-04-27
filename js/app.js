@@ -248,7 +248,8 @@ async function abrirPanelMiembros() {
           ${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre}
         </option>`).join('');
 
-      const seccionVinc = m.role !== 'admin' ? `
+      // La sección de vinculación aparece para todos, incluyendo el admin
+      const seccionVinc = `
         <div class="miembro-vinc" style="margin-top:8px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:5px">
             Jugador vinculado: <strong style="color:var(--text)">${vinc ? vinc.nombre : 'Ninguno'}</strong>
@@ -265,7 +266,7 @@ async function abrirPanelMiembros() {
             ${vinc ? `<button class="btn-permiso btn-quitar"
               onclick="quitarVinculacion('${vinc.id}', this)">✕</button>` : ''}
           </div>
-        </div>` : '';
+        </div>`;
 
       return `
       <div class="miembro-row" style="flex-direction:column;align-items:stretch">
