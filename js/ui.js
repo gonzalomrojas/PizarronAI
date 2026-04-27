@@ -1,6 +1,6 @@
 // ===================== TABS + WIZARD =====================
 
-const TABS = ['jugadores', 'partido', 'equipos', 'votar', 'historial', 'stats'];
+const TABS = ['jugadores', 'partido', 'equipos', 'votar', 'historial', 'stats', 'mi-carta'];
 
 function goTab(tab) {
   document.querySelectorAll('.tab').forEach((t, i) =>
@@ -18,6 +18,7 @@ function goTab(tab) {
   if (tab === 'votar')     prepararVotacion();
   if (tab === 'historial') renderHistorial();
   if (tab === 'stats')     renderStats();
+  if (tab === 'mi-carta')  renderMiCarta();
 
   updateWizard(tab);
 }
@@ -567,5 +568,177 @@ function abrirStatJugador(jugadorId) {
 
 function cerrarStats() {
   document.getElementById('modal-stats').classList.remove('open');
+}
+
+// ===================== MI CARTA =====================
+
+function renderMiCarta() {
+  const contenedor = document.getElementById('tab-mi-carta');
+  if (!contenedor) return;
+
+  // Caso 1: no hay jugador vinculado a esta cuenta
+  const j = getJugadorDelUsuarioActual();
+  if (!j) {
+    contenedor.innerHTML = `
+      <div class="section-title">Mi carta</div>
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:48px;margin-bottom:16px">🔗</div>
+        <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">
+          Sin jugador vinculado
+        </div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;max-width:280px;margin:0 auto">
+          El admin del grupo todavía no vinculó tu cuenta a un jugador.<br><br>
+          Pedile que abra <strong style="color:var(--text)">👥 Miembros</strong> y te asocie a tu jugador.
+        </div>
+      </div>`;
+    return;
+  }
+
+  const pos   = j.pos || 'MED';
+  const cfg   = POS_CONFIG[pos];
+  const s     = calcularStatsJugador(j.id);
+  const trend = calcTrend(j);
+  const pct   = s.partidos > 0 ? Math.round((s.ganados / s.partidos) * 100) : 0;
+
+  // Tendencia con color
+  const trendHtml = trend === 'up'
+    ? `<span style="color:var(--green);font-weight:700;font-size:14px">↑ Mejorando</span>`
+    : trend === 'dn'
+    ? `<span style="color:var(--red);font-weight:700;font-size:14px">↓ Bajando</span>`
+    : `<span style="color:var(--muted);font-weight:700;font-size:14px">→ Estable</span>`;
+
+  // Variación del rating: diferencia entre el último y el anteúltimo voto
+  const hist    = j.historial_votos || [j.rating];
+  const nHist   = hist.length;
+  const varRating = nHist >= 2 ? (hist[nHist-1] - hist[nHist-2]) : 0;
+  const varStr  = varRating > 0
+    ? `<span style="color:var(--green)">+${varRating.toFixed(1)}</span>`
+    : varRating < 0
+    ? `<span style="color:var(--red)">${varRating.toFixed(1)}</span>`
+    : `<span style="color:var(--muted)">±0.0</span>`;
+
+  // Evolución del rating (SVG igual al de stats)
+  const evHtml = s.evolucionRating.length > 1 ? (() => {
+    const vals  = s.evolucionRating.map(e => e.rating);
+    const min   = Math.max(0, Math.min(...vals) - 0.5);
+    const max   = Math.min(10, Math.max(...vals) + 0.5);
+    const range = max - min || 1;
+    const w = 300, h = 70, pad = 12;
+    const pts = vals.map((v, i) => {
+      const x = pad + (i / (vals.length - 1 || 1)) * (w - pad * 2);
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${x},${y}`;
+    }).join(' ');
+    const lastX = pad + ((vals.length-1) / (vals.length-1||1)) * (w-pad*2);
+    const lastY = h - pad - ((vals[vals.length-1]-min)/range)*(h-pad*2);
+    return `
+      <div style="margin:0 0 4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">
+        Evolución · últimos ${vals.length} partidos
+      </div>
+      <svg width="100%" viewBox="0 0 ${w} ${h}" style="overflow:visible;display:block">
+        <defs>
+          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="var(--muted)" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="var(--green)"/>
+          </linearGradient>
+        </defs>
+        <polyline points="${pts}" fill="none" stroke="url(#lineGrad)" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+        ${vals.map((v, i) => {
+          const x = pad + (i / (vals.length-1||1)) * (w-pad*2);
+          const y = h - pad - ((v-min)/range)*(h-pad*2);
+          return `<circle cx="${x}" cy="${y}" r="${i===vals.length-1?4:2.5}"
+            fill="${i===vals.length-1?'var(--green)':'var(--border)'}"/>`;
+        }).join('')}
+        <text x="${pad}" y="${h-1}" font-size="9" fill="var(--muted)">${vals[0].toFixed(1)}</text>
+        <text x="${lastX}" y="${lastY-8}" font-size="10" fill="var(--green)"
+          text-anchor="middle" font-weight="bold">${vals[vals.length-1].toFixed(1)}</text>
+      </svg>`;
+  })() : `<div style="font-size:12px;color:var(--muted);text-align:center;padding:12px 0">
+    Jugá más partidos para ver tu evolución de rating.
+  </div>`;
+
+  // Atributos con barras grandes
+  const attrsHtml = cfg.attrs.map(a => {
+    const val    = (j.attrs && j.attrs[a.key] !== undefined) ? j.attrs[a.key] : j.rating;
+    const valNum = Math.round(val * 10);
+    const pctBar = (val / 10) * 100;
+    const color  = val >= 7 ? 'var(--green)' : val >= 4.5 ? 'var(--yellow)' : 'var(--red)';
+    return `
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:12px;color:var(--muted)">${a.label}</span>
+          <span style="font-family:'Bebas Neue';font-size:20px;color:${color}">${valNum}</span>
+        </div>
+        <div style="height:5px;background:var(--border);border-radius:3px">
+          <div style="height:5px;width:${pctBar}%;background:${color};border-radius:3px;transition:width 0.4s"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  contenedor.innerHTML = `
+    <div class="section-title">Mi carta</div>
+
+    <!-- CARTA FIFA -->
+    <div style="margin-bottom:20px">
+      ${renderFifaCard(j, false)}
+    </div>
+
+    <!-- VARIACIÓN DESDE ÚLTIMO VOTO -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-family:'Bebas Neue';font-size:14px;letter-spacing:1px;color:var(--muted)">ÚLTIMO VOTO</div>
+        ${trendHtml}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:var(--muted)">Variación de rating</div>
+        <div style="font-family:'Bebas Neue';font-size:22px">${varStr}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        Basado en ${nHist} votación${nHist !== 1 ? 'es' : ''} acumuladas
+      </div>
+    </div>
+
+    <!-- STATS RÁPIDAS -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px">
+      <div style="font-family:'Bebas Neue';font-size:14px;letter-spacing:1px;color:var(--muted);margin-bottom:12px">MIS STATS</div>
+      <div class="stats-grid-4" style="margin-bottom:10px">
+        <div class="stat-mini"><div class="stat-mini-val">${s.partidos}</div><div class="stat-mini-label">Jugados</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" style="color:var(--green)">${s.ganados}</div><div class="stat-mini-label">Ganados</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" style="color:var(--muted)">${s.empatados}</div><div class="stat-mini-label">Empates</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" style="color:var(--red)">${s.perdidos}</div><div class="stat-mini-label">Perdidos</div></div>
+      </div>
+      <div class="stats-grid-3">
+        <div class="stat-mini"><div class="stat-mini-val" style="color:var(--yellow)">🏆 ${s.mvps}</div><div class="stat-mini-label">MVPs</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" style="color:var(--orange)">🔥 ${s.rachaActual}</div><div class="stat-mini-label">Racha</div></div>
+        <div class="stat-mini"><div class="stat-mini-val">${pct}%</div><div class="stat-mini-label">% victorias</div></div>
+      </div>
+      ${s.partidos > 0 ? `
+        <div style="margin-top:12px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+            <span>% victorias</span><span>${pct}%</span>
+          </div>
+          <div style="height:4px;background:var(--border);border-radius:2px">
+            <div style="height:4px;width:${pct}%;background:var(--green);border-radius:2px;transition:width 0.5s"></div>
+          </div>
+        </div>` : ''}
+    </div>
+
+    <!-- ATRIBUTOS -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px">
+      <div style="font-family:'Bebas Neue';font-size:14px;letter-spacing:1px;color:var(--muted);margin-bottom:14px">
+        ${cfg.icon} ATRIBUTOS — ${cfg.label.toUpperCase()}
+      </div>
+      ${attrsHtml}
+    </div>
+
+    <!-- EVOLUCIÓN -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:24px">
+      <div style="font-family:'Bebas Neue';font-size:14px;letter-spacing:1px;color:var(--muted);margin-bottom:12px">
+        EVOLUCIÓN DE RATING
+      </div>
+      ${evHtml}
+    </div>
+  `;
 }
 
