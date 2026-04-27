@@ -1,6 +1,7 @@
 // ===================== SUPABASE =====================
-const SUPABASE_URL = 'https://llyqmflurzduilnejrjy.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_V74ZPUv17PaQAszAsAO5Gw_H2y65Hsq';
+const SUPABASE_URL  = 'https://llyqmflurzduilnejrjy.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_V74ZPUv17PaQAszAsAO5Gw_H2y65Hsq';
+const SUPABASE_ANON = SUPABASE_KEY;   // alias para bug-report.js
 
 // ===================== STORAGE KEYS =====================
 const STORAGE_KEY       = 'pizarron_v1';
