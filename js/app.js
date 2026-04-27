@@ -20,6 +20,42 @@ function mostrarApp() {
   document.getElementById('screen-app').style.display        = 'block';
   aplicarRestriccionesPorRol();
   renderJugadores();
+  restaurarVistaEquipos();  
+}
+function restaurarVistaEquipos() {
+  // Si hay equipos guardados en sesión, restaurar la vista completa
+  const A = state.equipoASnapshot || [];
+  const B = state.equipoBSnapshot || [];
+  if (!A.length || !B.length) return;
+
+  // Re-renderizar los equipos en pantalla
+  const out = document.getElementById('equipos-output');
+  if (out) {
+    out.innerHTML = `
+      <div class="equipos-grid">
+        <div class="equipo equipo-a">
+          <div class="equipo-titulo">🟢 Equipo A <span class="equipo-sum">${(state.sumA||0).toFixed(1)} pts</span></div>
+          ${A.map(j => `<div class="jugador-chip">${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre} <span class="chip-rating">${j.rating.toFixed(1)}</span></div>`).join('')}
+        </div>
+        <div class="equipo equipo-b">
+          <div class="equipo-titulo">🔵 Equipo B <span class="equipo-sum">${(state.sumB||0).toFixed(1)} pts</span></div>
+          ${B.map(j => `<div class="jugador-chip">${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre} <span class="chip-rating">${j.rating.toFixed(1)}</span></div>`).join('')}
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-full" style="margin-top:12px" onclick="generarEquipos()">🔀 Regenerar equipos</button>
+      <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="compartirEquiposPorWhatsApp()">📲 Compartir por WhatsApp</button>
+    `;
+  }
+
+  // Mostrar sección de resultado
+  const seccion = document.getElementById('seccion-resultado');
+  if (seccion) seccion.style.display = 'block';
+
+  // Resetear inputs de goles
+  const ga = document.getElementById('goles-a');
+  const gb = document.getElementById('goles-b');
+  if (ga) ga.value = 0;
+  if (gb) gb.value = 0;
 }
 
 // Muestra/oculta elementos según el rol del usuario
