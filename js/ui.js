@@ -55,19 +55,84 @@ function updateWizard(activeTab) {
 
 // ===================== JUGADORES =====================
 
+// ---- Gráfico radar hexagonal (6 atributos generales) ----
+function renderRadarSVG(j, pos) {
+  const gen   = j.attrs_generales || {};
+  const vals  = ATTRS_GENERALES.map(a => (gen[a.key] != null ? gen[a.key] : j.rating) / 10);
+  const cx    = 60, cy = 60, r = 48;
+  const n     = vals.length;
+  const colorMap = { ARQ:'#FFD600', DEF:'#4da6ff', MED:'#00C853', ATA:'#FF3B30' };
+  const color = colorMap[pos] || '#00C853';
+
+  // Calcular puntos del hexágono
+  const pts = vals.map((v, i) => {
+    const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+    return {
+      x: cx + r * v * Math.cos(angle),
+      y: cy + r * v * Math.sin(angle),
+      lx: cx + (r + 14) * Math.cos(angle),
+      ly: cy + (r + 14) * Math.sin(angle),
+    };
+  });
+
+  // Grilla de fondo (3 niveles: 33%, 66%, 100%)
+  const gridLevels = [0.33, 0.66, 1.0];
+  const gridLines  = gridLevels.map(lv => {
+    const gpts = Array.from({length: n}, (_, i) => {
+      const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+      return `${cx + r * lv * Math.cos(angle)},${cy + r * lv * Math.sin(angle)}`;
+    }).join(' ');
+    return `<polygon points="${gpts}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+  }).join('');
+
+  // Ejes
+  const axes = Array.from({length: n}, (_, i) => {
+    const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+    return `<line x1="${cx}" y1="${cy}" x2="${cx + r * Math.cos(angle)}" y2="${cy + r * Math.sin(angle)}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
+  }).join('');
+
+  // Polígono de datos
+  const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  // Labels con valores
+  const labels = pts.map((p, i) => {
+    const a    = ATTRS_GENERALES[i];
+    const val  = gen[a.key] != null ? gen[a.key] : j.rating;
+    const ta   = p.lx < cx - 5 ? 'end' : p.lx > cx + 5 ? 'start' : 'middle';
+    return `
+      <text x="${p.lx.toFixed(1)}" y="${(p.ly - 5).toFixed(1)}" text-anchor="${ta}"
+        font-size="7" fill="rgba(255,255,255,0.5)" font-family="DM Sans,sans-serif">
+        ${a.label}
+      </text>
+      <text x="${p.lx.toFixed(1)}" y="${(p.ly + 5).toFixed(1)}" text-anchor="${ta}"
+        font-size="9" font-weight="700" fill="${color}" font-family="Bebas Neue,sans-serif">
+        ${Math.round(val * 10)}
+      </text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 120 120" width="120" height="120" style="flex-shrink:0">
+    ${gridLines}${axes}
+    <polygon points="${polyPts}"
+      fill="${color}" fill-opacity="0.18"
+      stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+    ${pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${color}"/>`).join('')}
+    ${labels}
+  </svg>`;
+}
+
 function renderFifaCard(j, clickable = false) {
-  const pos       = j.pos || 'MED';
-  const cfg       = POS_CONFIG[pos];
-  const trend     = calcTrend(j);
-  const nVotos    = j.historial_votos ? j.historial_votos.length : 1;
+  const pos    = j.pos || 'MED';
+  const cfg    = POS_CONFIG[pos];
+  const trend  = calcTrend(j);
+  const nVotos = j.historial_votos ? j.historial_votos.length : 1;
 
   const trendHtml = trend === 'up' ? '<span class="trend trend-up">↑ Mejorando</span>'
     : trend === 'dn' ? '<span class="trend trend-dn">↓ Bajando</span>'
-    : trend === 'eq' ? '<span class="trend trend-eq">→ Estable</span>'
-    : '';
+    : trend === 'eq' ? '<span class="trend trend-eq">→ Estable</span>' : '';
 
+  // Atributos de posición con barra
   const attrsHtml = cfg.attrs.map(a => {
-    const val = (j.attrs && j.attrs[a.key] !== undefined) ? j.attrs[a.key] : j.rating;
+    const val = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
     const pct = (val / 10) * 100;
     return `<div class="fifa-attr">
       <span class="fifa-attr-val">${Math.round(val * 10)}</span>
@@ -80,21 +145,49 @@ function renderFifaCard(j, clickable = false) {
     </div>`;
   }).join('');
 
+  // Atributos generales — chips numéricos
+  const gen = j.attrs_generales || {};
+  const generalesHtml = ATTRS_GENERALES.map(a => {
+    const val = gen[a.key] != null ? gen[a.key] : j.rating;
+    return `<div class="gen-attr-chip">
+      <span class="gen-attr-icon">${a.icon}</span>
+      <span class="gen-attr-val">${Math.round(val * 10)}</span>
+      <span class="gen-attr-label">${a.label}</span>
+    </div>`;
+  }).join('');
+
   return `
     <div class="fifa-card fifa-card-${pos} pos-${pos}">
       <div class="fifa-card-top">
         <div class="fifa-ovr">
           <span class="fifa-ovr-num">${Math.round(j.rating * 10)}</span>
-          <span class="fifa-ovr-pos">${cfg.label.substring(0, 3).toUpperCase()}</span>
+          <span class="fifa-ovr-pos">${cfg.label.substring(0,3).toUpperCase()}</span>
         </div>
         <div class="fifa-avatar fifa-avatar-${pos}">${j.nombre[0].toUpperCase()}</div>
         <div class="fifa-info">
           <div class="fifa-name">${j.nombre}</div>
-          <div class="fifa-meta">${j.partidos || 0} partido${(j.partidos || 0) !== 1 ? 's' : ''} · ${cfg.icon} ${cfg.label}</div>
+          <div class="fifa-meta">${j.partidos||0} partido${(j.partidos||0)!==1?'s':''} · ${cfg.icon} ${cfg.label}</div>
           <div class="decay-info">${trendHtml}<span style="margin-left:auto">${nVotos} votos</span></div>
         </div>
       </div>
-      <div class="fifa-attrs">${attrsHtml}</div>
+
+      <!-- Gráfico radar + atributos posición -->
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+        ${renderRadarSVG(j, pos)}
+        <div style="flex:1">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">
+            ${cfg.icon} Atributos ${cfg.label}
+          </div>
+          <div class="fifa-attrs">${attrsHtml}</div>
+        </div>
+      </div>
+
+      <!-- Atributos generales -->
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">
+        ⚽ Atributos generales
+      </div>
+      <div class="gen-attrs-grid">${generalesHtml}</div>
+
       ${clickable ? `
         <div class="fifa-card-actions">
           <button class="btn btn-secondary" style="flex:1;justify-content:center;font-size:12px"
@@ -235,16 +328,35 @@ function prepararVotacion() {
   lista.innerHTML = convocados.map(j => {
     const pos = j.pos || 'MED';
     const cfg = POS_CONFIG[pos];
-    const attrsHtml = cfg.attrs.map(a => {
-      const cur = (j.attrs && j.attrs[a.key] !== undefined) ? j.attrs[a.key] : j.rating;
-      return `<div class="attr-vote-row">
-        <span class="attr-vote-label">${a.label}</span>
-        <input type="range" id="vote-${j.id}-${a.key}" min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
-          oninput="document.getElementById('vv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1);
-                   actualizarVotoPreview('${j.id}')">
-        <span class="attr-vote-val" id="vv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
-      </div>`;
-    }).join('');
+    const gen = j.attrs_generales || {};
+    const attrsHtml = [
+      // Atributos de posición
+      `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:6px 0 4px">
+        ${cfg.icon} ${cfg.label}
+      </div>`,
+      ...cfg.attrs.map(a => {
+        const cur = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
+        return `<div class="attr-vote-row">
+          <span class="attr-vote-label">${a.label}</span>
+          <input type="range" id="vote-${j.id}-${a.key}" min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
+            oninput="document.getElementById('vv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="attr-vote-val" id="vv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
+        </div>`;
+      }),
+      // Atributos generales
+      `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px">
+        ⚽ Atributos generales
+      </div>`,
+      ...ATTRS_GENERALES.map(a => {
+        const cur = gen[a.key] != null ? gen[a.key] : j.rating;
+        return `<div class="attr-vote-row">
+          <span class="attr-vote-label">${a.icon} ${a.label}</span>
+          <input type="range" id="vote-${j.id}-${a.key}" min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
+            oninput="document.getElementById('vv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="attr-vote-val" id="vv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
+        </div>`;
+      }),
+    ].join('');
 
     return `<div class="vote-player">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
@@ -463,12 +575,28 @@ function abrirEditar(id) {
     <div style="font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;color:var(--muted);margin-bottom:10px">ATRIBUTOS</div>`;
 
   cfg.attrs.forEach(a => {
-    const val = (j.attrs && j.attrs[a.key] !== undefined) ? j.attrs[a.key] : j.rating;
+    const val = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
     html += `<div class="attr-edit-row">
       <span class="attr-edit-label">${a.label}</span>
       <input type="range" id="edit-attr-${a.key}" min="1" max="10" step="0.5" value="${val.toFixed(1)}"
         oninput="document.getElementById('ev-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
       <span class="attr-edit-val" id="ev-${a.key}">${val.toFixed(1)}</span>
+    </div>`;
+  });
+
+  // Atributos generales
+  html += `<hr style="margin:14px 0">
+    <div style="font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;color:var(--muted);margin-bottom:10px">
+      ⚽ ATRIBUTOS GENERALES
+    </div>`;
+  const gen = j.attrs_generales || {};
+  ATTRS_GENERALES.forEach(a => {
+    const val = gen[a.key] != null ? gen[a.key] : j.rating;
+    html += `<div class="attr-edit-row">
+      <span class="attr-edit-label">${a.icon} ${a.label}</span>
+      <input type="range" id="edit-gen-${a.key}" min="1" max="10" step="0.5" value="${val.toFixed(1)}"
+        oninput="document.getElementById('egv-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
+      <span class="attr-edit-val" id="egv-${a.key}">${val.toFixed(1)}</span>
     </div>`;
   });
 

@@ -268,6 +268,7 @@ function jugadorToRow(j) {
   return {
     id: j.id, grupo_id: grupoId, nombre: j.nombre, pos: j.pos || 'MED',
     rating: j.rating, attrs: j.attrs || {},
+    attrs_generales: j.attrs_generales || {},
     historial_votos: j.historial_votos || [j.rating],
     historial_votos_attrs: j.historial_votos_attrs || {},
     partidos: j.partidos || 0, votos_count: j.votos_count || 1,
@@ -278,7 +279,9 @@ function jugadorToRow(j) {
 function rowToJugador(row) {
   return {
     id: row.id, nombre: row.nombre, pos: row.pos, rating: row.rating,
-    attrs: row.attrs || {}, historial_votos: row.historial_votos || [row.rating],
+    attrs: row.attrs || {},
+    attrs_generales: row.attrs_generales || {},
+    historial_votos: row.historial_votos || [row.rating],
     historial_votos_attrs: row.historial_votos_attrs || {},
     partidos: row.partidos || 0, votos_count: row.votos_count || 1,
     auth_user_id: row.auth_user_id || null,
@@ -398,7 +401,16 @@ function loadSession() {
 // ===================== HELPERS =====================
 
 function getJugador(id)       { return state.jugadores.find(j => j.id === id) || null; }
-function defaultAttrs(pos, r) { const a = {}; POS_CONFIG[pos].attrs.forEach(x => { a[x.key] = r; }); return a; }
+function defaultAttrs(pos, r) {
+  const a = {};
+  POS_CONFIG[pos].attrs.forEach(x => { a[x.key] = r; });
+  return a;
+}
+function defaultAttrsGenerales(r) {
+  const a = {};
+  ATTRS_GENERALES.forEach(x => { a[x.key] = r; });
+  return a;
+}
 function posBadge(pos)        { const c = POS_CONFIG[pos]||POS_CONFIG.MED; return `<span class="pos-badge badge-${pos}">${c.icon} ${c.label}</span>`; }
 function generarGrupoId()     { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join(''); }
 function esAdmin()            { return currentRole === 'admin'; }
@@ -517,45 +529,48 @@ async function aplicarVotosRendimientoAJugadores(partidoId) {
     const j = state.jugadores.find(p => p.id === jugId);
     if (!j) return;
     const cfg = POS_CONFIG[j.pos || 'MED'];
+    if (!j.historial_votos_attrs) j.historial_votos_attrs = {};
+    if (!j.attrs_generales)       j.attrs_generales = defaultAttrsGenerales(j.rating);
 
+    // Atributos de posición
     cfg.attrs.forEach(a => {
       const vals = votosJug.map(v => v.attrs_votos[a.key]).filter(x => x != null);
       if (!vals.length) return;
       const avg = vals.reduce((s,x) => s+x, 0) / vals.length;
-      if (!j.historial_votos_attrs) j.historial_votos_attrs = {};
       if (!j.historial_votos_attrs[a.key]) j.historial_votos_attrs[a.key] = [j.attrs[a.key] || j.rating];
       j.historial_votos_attrs[a.key].push(avg);
       const va = j.historial_votos_attrs[a.key], na = va.length;
-      let sp = 0, sv = 0;
-      va.forEach((v, i) => { const pw = i >= na - RECENT_N ? RECENT_WEIGHT : 1; sp+=pw; sv+=v*pw; });
-      j.attrs[a.key] = sv / sp;
+      let sp=0, sv=0;
+      va.forEach((v,i) => { const pw=i>=na-RECENT_N?RECENT_WEIGHT:1; sp+=pw; sv+=v*pw; });
+      j.attrs[a.key] = sv/sp;
+    });
+
+    // Atributos generales
+    ATTRS_GENERALES.forEach(a => {
+      const vals = votosJug.map(v => v.attrs_votos[a.key]).filter(x => x != null);
+      if (!vals.length) return;
+      const avg  = vals.reduce((s,x) => s+x, 0) / vals.length;
+      const hkey = 'gen_' + a.key;
+      if (!j.historial_votos_attrs[hkey]) j.historial_votos_attrs[hkey] = [j.attrs_generales[a.key] || j.rating];
+      j.historial_votos_attrs[hkey].push(avg);
+      const va = j.historial_votos_attrs[hkey], na = va.length;
+      let sp=0, sv=0;
+      va.forEach((v,i) => { const pw=i>=na-RECENT_N?RECENT_WEIGHT:1; sp+=pw; sv+=v*pw; });
+      j.attrs_generales[a.key] = sv/sp;
     });
 
     const promGen = votosJug.reduce((s,v) => s+v.promedio, 0) / votosJug.length;
     if (!j.historial_votos) j.historial_votos = [j.rating];
     j.historial_votos.push(promGen);
     j.rating      = calcRatingConDecaimiento(j);
-    j.votos_count = (j.votos_count || 0) + 1;
-    j.partidos    = (j.partidos || 0) + 1;
+    j.votos_count = (j.votos_count||0) + 1;
+    j.partidos    = (j.partidos||0) + 1;
     actualizados.push(j);
   });
 
   if (actualizados.length) await syncJugadores(actualizados);
 }
 
-function usuarioJugoEnPartido(partido) {
-  if (!currentUser) return false;
-  // Admin siempre puede ver la votación (para testear y gestionar)
-  if (esAdmin()) return true;
-  // Member: verificar si tiene jugador vinculado que estuvo en el partido
-  const jp = getJugadorDelUsuarioActual();
-  if (!jp) return false;
-  return [...(partido.equipoA||[]),...(partido.equipoB||[])].some(j => j.id === jp.id);
-}
-
-// ===================== VOTACIÓN MVP =====================
-
-// Abrir votación MVP para un partido (solo admin)
 async function abrirVotacionMVP(partidoId) {
   await sbFetch('partidos?id=eq.' + partidoId + '&grupo_id=eq.' + grupoId, {
     method: 'PATCH',

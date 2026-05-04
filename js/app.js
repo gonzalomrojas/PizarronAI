@@ -307,7 +307,8 @@ async function agregarJugador() {
   const rating  = parseFloat(document.getElementById('input-rating').value);
   const jugador = {
     id: Date.now().toString(), nombre, pos: selectedPos, rating,
-    attrs: defaultAttrs(selectedPos, rating),
+    attrs:           defaultAttrs(selectedPos, rating),
+    attrs_generales: defaultAttrsGenerales(rating),
     partidos: 0, historial_votos: [rating], votos_count: 1,
   };
   state.jugadores.push(jugador);
@@ -342,6 +343,12 @@ async function guardarEdicion() {
   j.historial_votos[j.historial_votos.length - 1] = newRating;
   if (!j.attrs) j.attrs = {};
   cfg.attrs.forEach(a => { j.attrs[a.key] = parseFloat(document.getElementById('edit-attr-' + a.key).value); });
+  // Guardar atributos generales
+  if (!j.attrs_generales) j.attrs_generales = {};
+  ATTRS_GENERALES.forEach(a => {
+    const el = document.getElementById('edit-gen-' + a.key);
+    if (el) j.attrs_generales[a.key] = parseFloat(el.value);
+  });
   cerrarModal(); renderJugadores();
   setSyncing();
   try { await syncJugador(j); setSynced(); } catch(e) { setSyncError(); }

@@ -176,6 +176,24 @@
     #mi-carta-container .fifa-card {
       border: 2px solid var(--green);
     }
+
+    /* ---- ATRIBUTOS GENERALES CHIPS ---- */
+    .gen-attrs-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    }
+    .gen-attr-chip {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px; padding: 5px 4px;
+      display: flex; flex-direction: column; align-items: center; gap: 1px;
+      text-align: center;
+    }
+    .gen-attr-icon  { font-size: 13px; }
+    .gen-attr-val   { font-family: 'Bebas Neue'; font-size: 16px; color: var(--yellow); line-height: 1; }
+    .gen-attr-label { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
+
+    /* ---- RADAR ajustes ---- */
+    .fifa-card svg { display: block; }
   </style>
 </head>
 <body>
@@ -404,7 +422,7 @@
   </div>
 </div>
 
-<!-- MODAL: EDITAR RESULTADO DE PARTIDO --> 
+<!-- MODAL: EDITAR RESULTADO DE PARTIDO -->
 <div class="modal-overlay" id="modal-editar-resultado">
   <div class="modal">
     <button class="modal-close" onclick="cerrarEditarResultado()">✕</button>
