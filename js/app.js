@@ -20,42 +20,6 @@ function mostrarApp() {
   document.getElementById('screen-app').style.display        = 'block';
   aplicarRestriccionesPorRol();
   renderJugadores();
-  restaurarVistaEquipos();  
-}
-function restaurarVistaEquipos() {
-  // Si hay equipos guardados en sesión, restaurar la vista completa
-  const A = state.equipoASnapshot || [];
-  const B = state.equipoBSnapshot || [];
-  if (!A.length || !B.length) return;
-
-  // Re-renderizar los equipos en pantalla
-  const out = document.getElementById('equipos-output');
-  if (out) {
-    out.innerHTML = `
-      <div class="equipos-grid">
-        <div class="equipo equipo-a">
-          <div class="equipo-titulo">🟢 Equipo A <span class="equipo-sum">${(state.sumA||0).toFixed(1)} pts</span></div>
-          ${A.map(j => `<div class="jugador-chip">${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre} <span class="chip-rating">${j.rating.toFixed(1)}</span></div>`).join('')}
-        </div>
-        <div class="equipo equipo-b">
-          <div class="equipo-titulo">🔵 Equipo B <span class="equipo-sum">${(state.sumB||0).toFixed(1)} pts</span></div>
-          ${B.map(j => `<div class="jugador-chip">${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre} <span class="chip-rating">${j.rating.toFixed(1)}</span></div>`).join('')}
-        </div>
-      </div>
-      <button class="btn btn-secondary btn-full" style="margin-top:12px" onclick="generarEquipos()">🔀 Regenerar equipos</button>
-      <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="compartirEquiposPorWhatsApp()">📲 Compartir por WhatsApp</button>
-    `;
-  }
-
-  // Mostrar sección de resultado
-  const seccion = document.getElementById('seccion-resultado');
-  if (seccion) seccion.style.display = 'block';
-
-  // Resetear inputs de goles
-  const ga = document.getElementById('goles-a');
-  const gb = document.getElementById('goles-b');
-  if (ga) ga.value = 0;
-  if (gb) gb.value = 0;
 }
 
 // Muestra/oculta elementos según el rol del usuario
@@ -422,10 +386,15 @@ async function guardarPartido() {
   saveState();
   document.getElementById('seccion-resultado').style.display = 'none';
   document.getElementById('equipos-output').innerHTML +=
-    '<div class="alert alert-green" style="margin-top:8px">✅ Partido guardado.</div>';
+    '<div class="alert alert-green" style="margin-top:8px">✅ Partido guardado. Votación de rendimiento abierta automáticamente.</div>';
   updateWizard('historial');
   setSyncing();
-  try { await syncPartido(partido); setSynced(); } catch(e) { setSyncError(); }
+  try {
+    await syncPartido(partido);
+    // Abrir votación de rendimiento automáticamente
+    await abrirVotacionRendimiento(partido.id);
+    setSynced();
+  } catch(e) { setSyncError(); }
 }
 
 async function deshacerPartido(id) {
@@ -871,6 +840,149 @@ async function quitarVinculacion(jugadorId, btn) {
   }
 }
 
+
+// ===================== VOTAR RENDIMIENTO DESDE HISTORIAL =====================
+
+async function abrirFormVotacionRendimiento(partidoId) {
+  const partido = state.historial.find(p => p.id === partidoId);
+  if (!partido) return;
+
+  // Verificar que no haya votado ya (primero — es la comprobación más frecuente)
+  const yavoto = await yaVoteRendimiento(partidoId);
+  if (yavoto) {
+    alert('Ya enviaste tu votación para este partido.\nSolo se puede votar una vez por partido.');
+    return;
+  }
+
+  // Obtener jugador propio (puede ser null si no está vinculado)
+  const jp   = getJugadorDelUsuarioActual();
+  const todos = [...(partido.equipoA||[]),...(partido.equipoB||[])];
+
+  // Si no es admin y no tiene jugador vinculado: bloquear
+  if (!esAdmin() && !jp) {
+    alert('Tu cuenta todavía no está vinculada a ningún jugador.\nPedile al admin que te vincule desde el panel de Miembros.');
+    return;
+  }
+
+  // Si no es admin y su jugador no estuvo en el partido: bloquear
+  if (!esAdmin() && jp && !todos.some(j => j.id === jp.id)) {
+    alert('No participaste en este partido, no podés votar el rendimiento.');
+    return;
+  }
+
+  // Armar la lista de jugadores a calificar (excluir al propio)
+  const aVotar = todos.filter(j => j.id !== (jp ? jp.id : null));
+
+  const modal     = document.getElementById('modal-votar-rendimiento');
+  const titulo    = document.getElementById('vr-titulo');
+  const cuerpo    = document.getElementById('vr-cuerpo');
+  const btnGuard  = document.getElementById('vr-btn-guardar');
+
+  modal.dataset.partidoId = partidoId;
+  titulo.textContent      = 'Votar rendimiento — ' + partido.fecha;
+  btnGuard.disabled       = false;
+  btnGuard.textContent    = '✅ Enviar votación';
+
+  cuerpo.innerHTML = aVotar.map(j => {
+    const pos = j.pos || 'MED';
+    const cfg = POS_CONFIG[pos];
+    const jState = state.jugadores.find(p => p.id === j.id);
+
+    const attrsHtml = cfg.attrs.map(a => {
+      const cur = (jState && jState.attrs && jState.attrs[a.key] != null)
+        ? jState.attrs[a.key] : 5;
+      return `<div class="attr-vote-row">
+        <span class="attr-vote-label">${a.label}</span>
+        <input type="range" id="vr-${j.id}-${a.key}"
+          min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
+          oninput="document.getElementById('vrv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
+        <span class="attr-vote-val" id="vrv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="vote-player" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+        <div class="avatar avatar-${pos}" style="width:36px;height:36px;font-size:14px">
+          ${j.nombre[0].toUpperCase()}
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:14px">${j.nombre}</div>
+          <div style="font-size:11px;color:var(--muted)">${cfg.icon} ${cfg.label}</div>
+        </div>
+      </div>
+      ${attrsHtml}
+    </div>`;
+  }).join('');
+
+  if (!aVotar.length) {
+    cuerpo.innerHTML = '<div class="empty">No hay otros jugadores para calificar en este partido.</div>';
+    btnGuard.style.display = 'none';
+  } else {
+    btnGuard.style.display = 'block';
+  }
+
+  modal.classList.add('open');
+}
+
+async function enviarVotosRendimiento() {
+  const modal     = document.getElementById('modal-votar-rendimiento');
+  const partidoId = modal.dataset.partidoId;
+  const partido   = state.historial.find(p => p.id === partidoId);
+  if (!partido) return;
+
+  const jp     = getJugadorDelUsuarioActual();
+  const todos  = [...(partido.equipoA||[]),...(partido.equipoB||[])];
+  const aVotar = todos.filter(j => j.id !== (jp ? jp.id : null));
+
+  if (!aVotar.length) { cerrarVotacionRendimiento(); return; }
+
+  const btn = document.getElementById('vr-btn-guardar');
+  btn.disabled = true; btn.textContent = '⏳ Enviando...';
+
+  const votosMap = {};
+  aVotar.forEach(j => {
+    const pos = j.pos || 'MED';
+    const cfg = POS_CONFIG[pos];
+    const attrs_votos = {};
+    let sum = 0;
+    cfg.attrs.forEach(a => {
+      const el = document.getElementById('vr-' + j.id + '-' + a.key);
+      const val = el ? parseFloat(el.value) : 5;
+      attrs_votos[a.key] = val;
+      sum += val;
+    });
+    const promedio = sum / cfg.attrs.length;
+    votosMap[j.id] = { attrs_votos, promedio };
+  });
+
+  try {
+    setSyncing();
+    await guardarVotosRendimiento(partidoId, votosMap);
+    // Aplicar votos al rating de los jugadores
+    await aplicarVotosRendimientoAJugadores(partidoId);
+    await cargarJugadores();   // refrescar plantilla
+    setSynced();
+    cerrarVotacionRendimiento();
+    alert('✅ Votación enviada. Ratings actualizados.');
+    renderHistorial();
+    renderJugadores();
+  } catch(e) {
+    setSyncError();
+    btn.disabled = false;
+    btn.textContent = '✅ Enviar votación';
+    if (e.message && e.message.includes('23505')) {
+      alert('Ya enviaste tu votación para este partido.');
+      cerrarVotacionRendimiento();
+    } else {
+      alert('Error: ' + e.message);
+    }
+  }
+}
+
+function cerrarVotacionRendimiento() {
+  document.getElementById('modal-votar-rendimiento').classList.remove('open');
+}
+
 // ===================== INIT =====================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -885,6 +997,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('modal-stats').addEventListener('click', function(e) {
     if (e.target === this) cerrarStats();
+  });
+  document.getElementById('modal-votar-rendimiento').addEventListener('click', function(e) {
+    if (e.target === this) cerrarVotacionRendimiento();
   });
   document.getElementById('modal-editar-resultado').addEventListener('click', function(e) {
     if (e.target === this) cerrarEditarResultado();

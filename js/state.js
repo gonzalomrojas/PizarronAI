@@ -319,6 +319,7 @@ function partidoToRow(p) {
     mvp_abierto:        p.mvp_abierto        || false,
     mvp_jugador_id:     p.mvp_jugador_id     || null,
     mvp_jugador_nombre: p.mvp_jugador_nombre || null,
+    votacion_rendimiento_abierta: p.votacion_rendimiento_abierta || false,
   };
 }
 
@@ -334,11 +335,21 @@ function rowToPartido(row) {
     mvp_abierto:        row.mvp_abierto        || false,
     mvp_jugador_id:     row.mvp_jugador_id     || null,
     mvp_jugador_nombre: row.mvp_jugador_nombre || null,
+    // Votación rendimiento
+    votacion_rendimiento_abierta: row.votacion_rendimiento_abierta || false,
   };
 }
 
 async function cargarHistorial() {
-  const rows = await sbFetch('partidos?grupo_id=eq.' + grupoId + '&order=created_at.desc');
+  // Columnas explícitas — garantiza que votacion_rendimiento_abierta viene aunque sea null
+  const cols = [
+    'id','grupo_id','fecha','hora','goles_a','goles_b','ganador',
+    'suma_a','suma_b','balance_tag','resultado_tag',
+    'equipo_a','equipo_b','snapshot_jugadores','created_at',
+    'mvp_abierto','mvp_jugador_id','mvp_jugador_nombre',
+    'votacion_rendimiento_abierta'
+  ].join(',');
+  const rows = await sbFetch('partidos?grupo_id=eq.' + grupoId + '&order=created_at.desc&select=' + cols);
   state.historial = rows.map(rowToPartido);
 }
 
@@ -441,6 +452,105 @@ function esJugadorPropio(jugadorId) {
   if (!currentUser) return false;
   const j = state.jugadores.find(p => p.id === jugadorId);
   return j && j.auth_user_id === currentUser.id;
+}
+
+
+// ===================== VOTACIÓN DE RENDIMIENTO POR PARTIDO =====================
+
+async function abrirVotacionRendimiento(partidoId) {
+  await sbFetch('partidos?id=eq.' + partidoId + '&grupo_id=eq.' + grupoId, {
+    method: 'PATCH',
+    prefer: 'return=representation',
+    body:   JSON.stringify({ votacion_rendimiento_abierta: true }),
+  });
+  const p = state.historial.find(h => h.id === partidoId);
+  if (p) p.votacion_rendimiento_abierta = true;
+}
+
+async function yaVoteRendimiento(partidoId) {
+  if (!currentUser) return true;
+  const rows = await sbFetch(
+    'votos_rendimiento_sesion?partido_id=eq.' + partidoId +
+    '&voter_id=eq.' + currentUser.id + '&select=id'
+  );
+  return rows && rows.length > 0;
+}
+
+async function guardarVotosRendimiento(partidoId, votosMap) {
+  const inserts = Object.entries(votosMap).map(([jugadorId, data]) => ({
+    partido_id:  partidoId,
+    grupo_id:    grupoId,
+    voter_id:    currentUser.id,
+    jugador_id:  jugadorId,
+    attrs_votos: data.attrs_votos,
+    promedio:    data.promedio,
+  }));
+  await Promise.all(inserts.map(row =>
+    sbFetch('votos_rendimiento', {
+      method:  'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+      body:    JSON.stringify(row),
+    })
+  ));
+  // Marcar sesión completa — bloquea reingreso
+  await sbFetch('votos_rendimiento_sesion', {
+    method:  'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body:    JSON.stringify({ partido_id: partidoId, grupo_id: grupoId, voter_id: currentUser.id }),
+  });
+}
+
+async function aplicarVotosRendimientoAJugadores(partidoId) {
+  const votos = await sbFetch(
+    'votos_rendimiento?partido_id=eq.' + partidoId + '&select=jugador_id,attrs_votos,promedio'
+  );
+  if (!votos || !votos.length) return;
+
+  const porJugador = {};
+  votos.forEach(v => {
+    if (!porJugador[v.jugador_id]) porJugador[v.jugador_id] = [];
+    porJugador[v.jugador_id].push(v);
+  });
+
+  const actualizados = [];
+  Object.entries(porJugador).forEach(([jugId, votosJug]) => {
+    const j = state.jugadores.find(p => p.id === jugId);
+    if (!j) return;
+    const cfg = POS_CONFIG[j.pos || 'MED'];
+
+    cfg.attrs.forEach(a => {
+      const vals = votosJug.map(v => v.attrs_votos[a.key]).filter(x => x != null);
+      if (!vals.length) return;
+      const avg = vals.reduce((s,x) => s+x, 0) / vals.length;
+      if (!j.historial_votos_attrs) j.historial_votos_attrs = {};
+      if (!j.historial_votos_attrs[a.key]) j.historial_votos_attrs[a.key] = [j.attrs[a.key] || j.rating];
+      j.historial_votos_attrs[a.key].push(avg);
+      const va = j.historial_votos_attrs[a.key], na = va.length;
+      let sp = 0, sv = 0;
+      va.forEach((v, i) => { const pw = i >= na - RECENT_N ? RECENT_WEIGHT : 1; sp+=pw; sv+=v*pw; });
+      j.attrs[a.key] = sv / sp;
+    });
+
+    const promGen = votosJug.reduce((s,v) => s+v.promedio, 0) / votosJug.length;
+    if (!j.historial_votos) j.historial_votos = [j.rating];
+    j.historial_votos.push(promGen);
+    j.rating      = calcRatingConDecaimiento(j);
+    j.votos_count = (j.votos_count || 0) + 1;
+    j.partidos    = (j.partidos || 0) + 1;
+    actualizados.push(j);
+  });
+
+  if (actualizados.length) await syncJugadores(actualizados);
+}
+
+function usuarioJugoEnPartido(partido) {
+  if (!currentUser) return false;
+  // Admin siempre puede ver la votación (para testear y gestionar)
+  if (esAdmin()) return true;
+  // Member: verificar si tiene jugador vinculado que estuvo en el partido
+  const jp = getJugadorDelUsuarioActual();
+  if (!jp) return false;
+  return [...(partido.equipoA||[]),...(partido.equipoB||[])].some(j => j.id === jp.id);
 }
 
 // ===================== VOTACIÓN MVP =====================

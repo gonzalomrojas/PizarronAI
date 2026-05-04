@@ -164,6 +164,18 @@
     }
     .stat-mini-val   { font-family: 'Bebas Neue'; font-size: 22px; color: var(--text); }
     .stat-mini-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
+
+    /* ---- MODAL VOTACIÓN RENDIMIENTO ---- */
+    .vr-scroll { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+    .vote-player { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 13px; margin-bottom: 9px; }
+    .attr-vote-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+    .attr-vote-label { font-size: 11px; color: var(--muted); min-width: 90px; }
+    .attr-vote-val { font-family: 'Bebas Neue'; font-size: 16px; color: var(--yellow); min-width: 28px; text-align: right; }
+
+    /* ---- MI CARTA ---- */
+    #mi-carta-container .fifa-card {
+      border: 2px solid var(--green);
+    }
   </style>
 </head>
 <body>
@@ -253,12 +265,13 @@
     <button class="tab" id="tab-btn-votar" onclick="goTab('votar')">⭐ Votar</button>
     <button class="tab"         onclick="goTab('historial')">📋 Historial</button>
     <button class="tab"         onclick="goTab('stats')">📊 Stats</button>
-    <button class="tab"         onclick="goTab('mi-carta')">🃏 Mi carta</button>
   </div>
 
   <!-- JUGADORES -->
   <div id="tab-jugadores" class="view active">
     <div class="section-title">Plantilla</div>
+    <!-- MI CARTA: tarjeta del jugador vinculado al usuario actual -->
+    <div id="mi-carta-container"></div>
     <!-- Formulario solo para admin -->
     <div class="card solo-admin" style="display:none">
       <label>Nombre del jugador</label>
@@ -331,11 +344,6 @@
     <!-- Se rellena en renderStats() -->
   </div>
 
-  <!-- MI CARTA -->
-  <div id="tab-mi-carta" class="view">
-    <!-- Se rellena en renderMiCarta() -->
-  </div>
-
 </div><!-- /screen-app -->
 
 <!-- MODAL EDITAR JUGADOR -->
@@ -364,7 +372,6 @@
 <script src="js/algorithm.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
-<script src="js/bug-report.js"></script>
 
 <!-- MODAL: PARTIDO MANUAL -->
 <div class="modal-overlay" id="modal-partido-manual">
@@ -456,6 +463,24 @@
     <button class="modal-close" onclick="cerrarStats()">✕</button>
     <div class="modal-title" id="modal-stats-titulo">Estadísticas</div>
     <div id="modal-stats-cuerpo"></div>
+  </div>
+</div>
+
+
+<!-- MODAL: VOTAR RENDIMIENTO POR PARTIDO -->
+<div class="modal-overlay" id="modal-votar-rendimiento">
+  <div class="modal" style="max-height:90vh;display:flex;flex-direction:column">
+    <div style="flex-shrink:0">
+      <button class="modal-close" onclick="cerrarVotacionRendimiento()">✕</button>
+      <div class="modal-title" id="vr-titulo">Votar rendimiento</div>
+      <div class="modal-sub">Calificá los atributos de tus compañeros. Solo podés votar una vez.</div>
+    </div>
+    <div class="vr-scroll" id="vr-cuerpo" style="flex:1;overflow-y:auto;margin:12px 0"></div>
+    <div style="flex-shrink:0">
+      <button class="btn btn-primary btn-full" id="vr-btn-guardar" onclick="enviarVotosRendimiento()">
+        ✅ Enviar votación
+      </button>
+    </div>
   </div>
 </div>
 

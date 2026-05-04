@@ -107,6 +107,31 @@ function renderFifaCard(j, clickable = false) {
 
 function renderJugadores() {
   const lista = document.getElementById('lista-jugadores');
+
+  // ---- MI CARTA: mostrar la tarjeta del jugador vinculado al usuario actual ----
+  const miCarta = document.getElementById('mi-carta-container');
+  if (miCarta) {
+    const jp = typeof getJugadorDelUsuarioActual === 'function' ? getJugadorDelUsuarioActual() : null;
+    if (jp) {
+      // Encontrar el jugador actualizado del state (para ratings frescos)
+      const jpActual = state.jugadores.find(j => j.id === jp.id) || jp;
+      miCarta.innerHTML = `
+        <div style="font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;
+                    color:var(--green);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+          🎴 MI CARTA
+        </div>
+        ${renderFifaCard(jpActual, false)}
+        <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:-4px;margin-bottom:12px">
+          Tu jugador vinculado · Rating actualizado con tus últimos partidos
+        </div>`;
+    } else {
+      miCarta.innerHTML = currentUser ? `
+        <div class="alert alert-yellow" style="margin-bottom:12px;font-size:12px">
+          🎴 <strong>Mi carta:</strong> El admin no vinculó tu cuenta a ningún jugador todavía.
+        </div>` : '';
+    }
+  }
+
   if (!state.jugadores.length) {
     lista.innerHTML = '<div class="empty">Agregá el primer jugador arriba.</div>';
     return;
@@ -310,6 +335,35 @@ function renderHistorial() {
       .filter(j => j.id !== jugPropioId)   // excluir jugador propio si está en el partido
       .map(j => `<option value="${j.id}">${j.nombre}</option>`).join('');
 
+    // Sección votación de rendimiento
+    const votAbierta = p.votacion_rendimiento_abierta === true;
+    const jpActual   = typeof getJugadorDelUsuarioActual === 'function' ? getJugadorDelUsuarioActual() : null;
+    const jugoPart   = jpActual && [...(p.equipoA||[]),...(p.equipoB||[])].some(j => j.id === jpActual.id);
+    const esAdm      = typeof esAdmin === 'function' && esAdmin();
+
+    let seccionRendimiento = '';
+    if (votAbierta) {
+      if (esAdm || jugoPart) {
+        // Puede votar o es admin
+        seccionRendimiento = `<div style="margin-top:10px">
+          <button class="btn btn-primary btn-full" style="font-size:12px;background:var(--orange)"
+            onclick="abrirFormVotacionRendimiento('${p.id}')">
+            ⭐ Calificar rendimiento del partido
+          </button>
+        </div>`;
+      } else if (currentUser && !jpActual) {
+        // Logueado pero sin jugador vinculado
+        seccionRendimiento = `<div class="alert alert-yellow" style="font-size:11px;margin-top:8px;padding:7px 10px">
+          ⭐ Votación abierta — el admin debe vincular tu cuenta a tu jugador para que puedas votar
+        </div>`;
+      } else if (currentUser && jpActual && !jugoPart) {
+        // Tiene jugador vinculado pero no jugó en este partido
+        seccionRendimiento = `<div style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">
+          ⭐ Votación abierta (no participaste en este partido)
+        </div>`;
+      }
+    }
+
     const seccionMVP = p.mvp_jugador_nombre
       ? mvpBadge
       : p.mvp_abierto
@@ -377,6 +431,7 @@ function renderHistorial() {
         ${tagBalance(p.balance_tag)} ${tagResultado(p.resultado_tag)}
         <span style="color:var(--muted)"> · Dif. ${Math.abs((p.sumA||0)-(p.sumB||0)).toFixed(1)} pts</span>
       </div>
+      ${seccionRendimiento}
       ${seccionMVP}
       ${botonesAdmin}
     </div>`;
