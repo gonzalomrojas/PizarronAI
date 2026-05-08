@@ -198,6 +198,53 @@
 </head>
 <body>
 
+<!-- ===== PANTALLA: NUEVA CONTRASEÑA (recovery desde email) ===== -->
+<div id="screen-recovery" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);
+     z-index:1000;align-items:center;justify-content:center;padding:20px;">
+  <div class="auth-card">
+    <div class="auth-logo">⚽ Pizarrón AI</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
+                letter-spacing:1px;margin-bottom:20px">Recuperar contraseña</div>
+
+    <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;
+                margin-bottom:6px;color:var(--text)">🔑 Nueva contraseña</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.5">
+      Elegí una contraseña nueva para tu cuenta.
+    </div>
+
+    <div class="auth-error" id="recovery-error"></div>
+
+    <label style="margin-top:0">Nueva contraseña</label>
+    <input type="password" id="input-nueva-pass"
+      placeholder="Mínimo 6 caracteres"
+      autocomplete="new-password"
+      onkeydown="if(event.key==='Enter') document.getElementById('input-nueva-pass2').focus()"
+      style="margin-bottom:10px">
+
+    <label>Repetir contraseña</label>
+    <input type="password" id="input-nueva-pass2"
+      placeholder="Repetí la contraseña"
+      autocomplete="new-password"
+      onkeydown="if(event.key==='Enter') submitNuevaContrasena()"
+      style="margin-bottom:4px">
+
+    <button class="btn btn-primary btn-full" id="btn-nueva-pass"
+      onclick="submitNuevaContrasena()" style="margin-top:14px">
+      🔒 Guardar nueva contraseña
+    </button>
+
+    <div style="text-align:center;margin-top:14px">
+      <button onclick="history.replaceState(null,'',window.location.pathname);
+                       document.getElementById('screen-recovery').style.display='none';
+                       mostrarLogin();"
+        style="background:none;border:none;color:var(--muted);font-size:12px;
+               cursor:pointer;text-decoration:underline dotted;font-family:'DM Sans',sans-serif;">
+        Volver al inicio de sesión
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== PANTALLA LOGIN ===== -->
 <div id="screen-login">
   <div class="auth-card">
@@ -210,6 +257,16 @@
     <label>Contraseña</label>
     <input type="password" id="input-auth-password" placeholder="Mínimo 6 caracteres"   autocomplete="current-password" style="margin-bottom:4px">
     <button class="btn btn-primary btn-full" id="btn-submit-auth" onclick="submitAuth()" style="margin-top:14px">Entrar</button>
+
+    <!-- Link recuperar contraseña — solo visible en modo login -->
+    <div id="link-recuperar" style="text-align:center;margin-top:10px">
+      <button id="btn-recuperar" onclick="olvideMiContrasena()"
+        style="background:none;border:none;color:var(--muted);font-size:12px;
+               cursor:pointer;text-decoration:underline dotted;font-family:'DM Sans',sans-serif;">
+        Olvidé mi contraseña
+      </button>
+    </div>
+
     <div class="auth-toggle">
       <span id="auth-subtitulo">¿No tenés cuenta?</span>
       <button id="btn-toggle-auth" onclick="toggleModoAuth()">Registrarse</button>

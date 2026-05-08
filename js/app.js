@@ -65,11 +65,58 @@ let modoLogin = 'login';
 function toggleModoAuth() {
   modoLogin = modoLogin === 'login' ? 'registro' : 'login';
   const isLogin = modoLogin === 'login';
-  document.getElementById('auth-titulo').textContent    = isLogin ? '👤 Iniciar sesión' : '✨ Crear cuenta';
-  document.getElementById('auth-subtitulo').textContent = isLogin ? '¿No tenés cuenta?' : '¿Ya tenés cuenta?';
+  document.getElementById('auth-titulo').textContent     = isLogin ? '👤 Iniciar sesión' : '✨ Crear cuenta';
+  document.getElementById('auth-subtitulo').textContent  = isLogin ? '¿No tenés cuenta?' : '¿Ya tenés cuenta?';
   document.getElementById('btn-submit-auth').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
   document.getElementById('btn-toggle-auth').textContent = isLogin ? 'Registrarse' : 'Iniciar sesión';
+  // Mostrar/ocultar link de recuperar contraseña solo en modo login
+  const linkRec = document.getElementById('link-recuperar');
+  if (linkRec) linkRec.style.display = isLogin ? 'block' : 'none';
   limpiarErrorAuth();
+}
+
+// ===================== RECUPERAR CONTRASEÑA =====================
+
+async function olvideMiContrasena() {
+  const email = document.getElementById('input-auth-email').value.trim();
+  if (!email) {
+    mostrarErrorAuth('Ingresá tu email antes de recuperar la contraseña.');
+    document.getElementById('input-auth-email').focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-recuperar');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Enviando...'; }
+  limpiarErrorAuth();
+
+  try {
+    const res = await fetch(SUPABASE_URL + '/auth/v1/recover', {
+      method:  'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email }),
+    });
+    // Supabase siempre devuelve 200 aunque el email no exista (por seguridad)
+    mostrarMensajeAuth(
+      '✅ Si ese email está registrado, vas a recibir un link para resetear tu contraseña. Revisá tu bandeja de entrada.',
+      'var(--green)'
+    );
+  } catch(e) {
+    mostrarErrorAuth('Error al enviar el email. Intentá de nuevo.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Recuperar contraseña'; }
+  }
+}
+
+function mostrarMensajeAuth(msg, color) {
+  // Reutiliza el div de error pero con color verde para mensajes de éxito
+  const el = document.getElementById('auth-error');
+  if (el) {
+    el.textContent   = msg;
+    el.style.display = 'block';
+    el.style.background = color === 'var(--green)' ? '#0a2a0a' : '#2a0a0a';
+    el.style.borderColor = color;
+    el.style.color       = color;
+  }
 }
 
 function mostrarErrorAuth(msg) {
@@ -990,6 +1037,93 @@ function cerrarVotacionRendimiento() {
   document.getElementById('modal-votar-rendimiento').classList.remove('open');
 }
 
+
+// ===================== RESET DE CONTRASEÑA =====================
+// Cuando el usuario hace click en el link del email, Supabase redirige
+// con el token en el hash de la URL: #access_token=xxx&type=recovery
+// Detectamos eso al cargar y mostramos el formulario de nueva contraseña.
+
+function detectarTokenRecovery() {
+  const hash   = window.location.hash;
+  if (!hash) return false;
+
+  // Parsear el hash como query string
+  const params = {};
+  hash.replace('#', '').split('&').forEach(pair => {
+    const [k, v] = pair.split('=');
+    if (k && v) params[decodeURIComponent(k)] = decodeURIComponent(v);
+  });
+
+  if (params.type !== 'recovery' || !params.access_token) return false;
+
+  // Guardar el token — lo necesitamos para actualizar la contraseña
+  authToken = params.access_token;
+  return true;
+}
+
+async function submitNuevaContrasena() {
+  const pass1 = document.getElementById('input-nueva-pass').value;
+  const pass2 = document.getElementById('input-nueva-pass2').value;
+  const btn   = document.getElementById('btn-nueva-pass');
+
+  if (!pass1 || pass1.length < 6) {
+    mostrarErrorRecovery('La contraseña debe tener al menos 6 caracteres.');
+    return;
+  }
+  if (pass1 !== pass2) {
+    mostrarErrorRecovery('Las contraseñas no coinciden.');
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Guardando...';
+  limpiarErrorRecovery();
+
+  try {
+    // Actualizar contraseña usando el token del email
+    const res = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      method:  'PUT',
+      headers: {
+        'apikey':        SUPABASE_KEY,
+        'Authorization': 'Bearer ' + authToken,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({ password: pass1 }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || 'Error al actualizar la contraseña.');
+    }
+
+    // Éxito — limpiar el hash de la URL y volver al login
+    history.replaceState(null, '', window.location.pathname);
+    authToken = null;
+
+    document.getElementById('screen-recovery').style.display = 'none';
+    mostrarLogin();
+
+    // Mostrar mensaje de éxito en el login
+    setTimeout(() => {
+      mostrarMensajeAuth('✅ Contraseña actualizada. Ya podés iniciar sesión.', 'var(--green)');
+    }, 100);
+
+  } catch(e) {
+    btn.disabled    = false;
+    btn.textContent = 'Guardar nueva contraseña';
+    mostrarErrorRecovery(e.message || 'Error al guardar. El link puede haber expirado.');
+  }
+}
+
+function mostrarErrorRecovery(msg) {
+  const el = document.getElementById('recovery-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+function limpiarErrorRecovery() {
+  const el = document.getElementById('recovery-error');
+  if (el) { el.textContent = ''; el.style.display = 'none'; }
+}
+
 // ===================== INIT =====================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1024,5 +1158,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Enter') unirseGrupo();
   });
   updateWizard('jugadores');
+
+  // Detectar si venimos de un link de recuperación de contraseña
+  if (detectarTokenRecovery()) {
+    // Ocultar todo y mostrar pantalla de nueva contraseña
+    document.getElementById('screen-login').style.display      = 'none';
+    document.getElementById('screen-onboarding').style.display = 'none';
+    document.getElementById('screen-app').style.display        = 'none';
+    document.getElementById('screen-recovery').style.display   = 'flex';
+    return;
+  }
+
   await initApp();
 });
