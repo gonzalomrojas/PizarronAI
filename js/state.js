@@ -16,6 +16,7 @@ let state = {
 let grupoId     = null;
 let currentUser = null;   // { id, email }
 let authToken   = null;   // JWT Supabase
+let refreshToken = null;  // Token para renovar la sesión
 let currentRole = null;   // 'admin' | 'member'
 let puedeVotar  = false;  // true si es admin O tiene permiso explícito
 
@@ -31,7 +32,7 @@ function setSyncError() { setSyncStatus('❌ Error', 'var(--red)'); }
 
 // ===================== SUPABASE REST =====================
 
-async function sbFetch(path, options = {}) {
+async function sbFetch(path, options = {}, _isRetry = false) {
   const url    = SUPABASE_URL + '/rest/v1/' + path;
   const bearer = authToken || SUPABASE_KEY;
   const prefer = options.prefer !== undefined ? options.prefer : 'return=representation';
@@ -43,12 +44,51 @@ async function sbFetch(path, options = {}) {
   if (prefer) headers['Prefer'] = prefer;
   Object.assign(headers, options.headers || {});
   const res = await fetch(url, { method: options.method || 'GET', headers, body: options.body });
+
   if (!res.ok) {
     const err = await res.text();
+    // Si el JWT expiró y tenemos refresh token, renovamos y reintentamos UNA vez
+    if (res.status === 401 && err.includes('JWT expired') && !_isRetry && refreshToken) {
+      const renovado = await refreshSession();
+      if (renovado) {
+        return sbFetch(path, options, true);  // reintento con token nuevo
+      }
+    }
     throw new Error('Supabase ' + res.status + ': ' + err);
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+// Renueva la sesión usando el refresh token. Devuelve true si tuvo éxito.
+async function refreshSession() {
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method:  'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      // El refresh token también expiró — hay que volver a loguearse
+      console.warn('[auth] Refresh token inválido, requiere login');
+      return false;
+    }
+    const data = await res.json();
+    authToken    = data.access_token;
+    refreshToken = data.refresh_token;
+    // Actualizar localStorage con los tokens nuevos
+    localStorage.setItem(STORAGE_KEY + '_auth', JSON.stringify({
+      token:        authToken,
+      refreshToken: refreshToken,
+      user:         currentUser,
+      expiry:       Date.now() + (data.expires_in * 1000),
+    }));
+    return true;
+  } catch(e) {
+    console.error('[auth] Error al renovar sesión:', e);
+    return false;
+  }
 }
 
 async function sbAuth(path, body) {
@@ -66,12 +106,14 @@ async function sbAuth(path, body) {
 
 async function loginEmail(email, password) {
   const data = await sbAuth('token?grant_type=password', { email, password });
-  authToken   = data.access_token;
-  currentUser = { id: data.user.id, email: data.user.email };
+  authToken    = data.access_token;
+  refreshToken = data.refresh_token;
+  currentUser  = { id: data.user.id, email: data.user.email };
   localStorage.setItem(STORAGE_KEY + '_auth', JSON.stringify({
-    token:  authToken,
-    user:   currentUser,
-    expiry: Date.now() + (data.expires_in * 1000),
+    token:        authToken,
+    refreshToken: refreshToken,
+    user:         currentUser,
+    expiry:       Date.now() + (data.expires_in * 1000),
   }));
   // Guardar/actualizar email en user_profiles para que otros usuarios lo vean
   try {
@@ -87,12 +129,14 @@ async function loginEmail(email, password) {
 async function registrarEmail(email, password) {
   const data = await sbAuth('signup', { email, password });
   if (data.access_token) {
-    authToken   = data.access_token;
-    currentUser = { id: data.user.id, email: data.user.email };
+    authToken    = data.access_token;
+    refreshToken = data.refresh_token;
+    currentUser  = { id: data.user.id, email: data.user.email };
     localStorage.setItem(STORAGE_KEY + '_auth', JSON.stringify({
-      token:  authToken,
-      user:   currentUser,
-      expiry: Date.now() + (data.expires_in * 1000),
+      token:        authToken,
+      refreshToken: refreshToken,
+      user:         currentUser,
+      expiry:       Date.now() + (data.expires_in * 1000),
     }));
     // Guardar email en user_profiles
     try {
@@ -117,11 +161,12 @@ async function cerrarSesion() {
       });
     } catch(e) {}
   }
-  authToken   = null;
-  currentUser = null;
-  grupoId     = null;
-  currentRole = null;
-  puedeVotar  = false;
+  authToken    = null;
+  refreshToken = null;
+  currentUser  = null;
+  grupoId      = null;
+  currentRole  = null;
+  puedeVotar   = false;
   state       = { jugadores:[], convocados:[], equipoA:[], equipoB:[], historial:[] };
   localStorage.removeItem(STORAGE_KEY + '_auth');
   localStorage.removeItem(STORAGE_KEY + '_session');
@@ -132,12 +177,19 @@ function loadAuthFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY + '_auth');
     if (!raw) return false;
     const saved = JSON.parse(raw);
-    if (saved.expiry && Date.now() > saved.expiry - 300000) {
-      localStorage.removeItem(STORAGE_KEY + '_auth');
-      return false;
+    authToken    = saved.token;
+    refreshToken = saved.refreshToken || null;
+    currentUser  = saved.user;
+    // Si el token expiró pero tenemos refresh token, lo renovamos en initApp.
+    // Si no hay refresh token y expiró, requiere login.
+    if (saved.expiry && Date.now() > saved.expiry - 60000) {
+      if (!refreshToken) {
+        localStorage.removeItem(STORAGE_KEY + '_auth');
+        return false;
+      }
+      // hay refresh token — marcamos que necesita renovación
+      return 'needs_refresh';
     }
-    authToken   = saved.token;
-    currentUser = saved.user;
     return true;
   } catch(e) { return false; }
 }
@@ -700,6 +752,17 @@ async function initApp() {
   setSyncStatus('⏳ Conectando...', 'var(--yellow)');
   const tieneAuth = loadAuthFromStorage();
   if (!tieneAuth) { mostrarLogin(); return; }
+
+  // Si el token está vencido pero hay refresh token, renovamos primero
+  if (tieneAuth === 'needs_refresh') {
+    setSyncStatus('🔄 Renovando sesión...', 'var(--yellow)');
+    const renovado = await refreshSession();
+    if (!renovado) {
+      localStorage.removeItem(STORAGE_KEY + '_auth');
+      mostrarLogin();
+      return;
+    }
+  }
 
   setSyncStatus('⏳ Cargando...', 'var(--yellow)');
   try {
