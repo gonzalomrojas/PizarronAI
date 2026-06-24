@@ -441,6 +441,75 @@
   </div>
 </div>
 
+<!-- BOTÓN FLOTANTE: REPORTAR PROBLEMA -->
+<button class="bug-trigger" id="bug-trigger" onclick="abrirReporteBug()" style="display:none">
+  <span class="bug-dot"></span> Reportar problema
+</button>
+
+<!-- MODAL REPORTAR BUG -->
+<div class="modal-overlay" id="modal-bug">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarReporteBug()">✕</button>
+
+    <div id="bug-form-state">
+      <div class="modal-title">🐛 Reportar falla</div>
+      <div class="modal-sub">Contanos qué pasó. El reporte llega directo al developer.</div>
+
+      <label>¿Qué tipo de problema es?</label>
+      <div class="cat-grid" id="bug-cat-grid">
+        <div class="cat-btn" onclick="seleccionarCatBug(this,'sync')" data-cat="sync">
+          <span class="cat-icon">☁️</span>
+          <div><div class="cat-label">Sincronización</div><div class="cat-desc">Datos no se actualizan</div></div>
+        </div>
+        <div class="cat-btn" onclick="seleccionarCatBug(this,'equipos')" data-cat="equipos">
+          <span class="cat-icon">⚖️</span>
+          <div><div class="cat-label">Equipos / Balanceo</div><div class="cat-desc">Algo en el armado</div></div>
+        </div>
+        <div class="cat-btn" onclick="seleccionarCatBug(this,'votos')" data-cat="votos">
+          <span class="cat-icon">⭐</span>
+          <div><div class="cat-label">Votación</div><div class="cat-desc">Votos o ratings</div></div>
+        </div>
+        <div class="cat-btn" onclick="seleccionarCatBug(this,'visual')" data-cat="visual">
+          <span class="cat-icon">🎨</span>
+          <div><div class="cat-label">Visual / UI</div><div class="cat-desc">Se ve mal o roto</div></div>
+        </div>
+        <div class="cat-btn" onclick="seleccionarCatBug(this,'performance')" data-cat="performance">
+          <span class="cat-icon">🐌</span>
+          <div><div class="cat-label">Lentitud</div><div class="cat-desc">Carga lenta o freeze</div></div>
+        </div>
+        <div class="cat-btn" onclick="seleccionarCatBug(this,'otro')" data-cat="otro">
+          <span class="cat-icon">💬</span>
+          <div><div class="cat-label">Otro / Sugerencia</div><div class="cat-desc">Idea o mejora</div></div>
+        </div>
+      </div>
+
+      <label>Impacto del problema</label>
+      <div class="sev-row" id="bug-sev-row">
+        <div class="sev-btn" onclick="seleccionarSevBug(this,'baja')">😐 Leve</div>
+        <div class="sev-btn" onclick="seleccionarSevBug(this,'media')">⚠️ Molesto</div>
+        <div class="sev-btn" onclick="seleccionarSevBug(this,'alta')">🔥 Bloqueante</div>
+        <div class="sev-btn" onclick="seleccionarSevBug(this,'critica')">💀 App rota</div>
+      </div>
+
+      <label>Descripción</label>
+      <textarea id="bug-desc" rows="4" placeholder="Contame qué pasó, qué intentabas hacer y qué viste en pantalla..."></textarea>
+
+      <label>Pasos para reproducir (opcional)</label>
+      <textarea id="bug-pasos" rows="3" placeholder="1. Fui a Equipos&#10;2. Toqué 'Armar equipos'&#10;3. La app se cerró"></textarea>
+
+      <button class="btn btn-primary btn-full" id="bug-submit-btn" onclick="enviarReporteBug()">Enviar reporte →</button>
+    </div>
+
+    <div id="bug-success-state" style="display:none;text-align:center;padding:10px 0">
+      <div style="font-size:44px;margin-bottom:12px">🎉</div>
+      <div class="modal-title" style="color:var(--green)">¡Reporte enviado!</div>
+      <div class="modal-sub">Tu reporte quedó registrado. Lo vamos a revisar y resolver lo antes posible.</div>
+      <div style="display:inline-block;margin-top:12px;padding:6px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:18px;color:var(--orange)" id="bug-ticket-id">—</div>
+      <button class="btn btn-primary btn-full" style="margin-top:16px" onclick="cerrarReporteBug()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/rating.js"></script>

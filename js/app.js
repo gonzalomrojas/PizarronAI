@@ -8,6 +8,7 @@ function mostrarLogin() {
   document.getElementById('screen-login').style.display      = 'flex';
   document.getElementById('screen-onboarding').style.display = 'none';
   document.getElementById('screen-app').style.display        = 'none';
+  document.getElementById('bug-trigger').style.display       = 'none';
 }
 function mostrarOnboarding() {
   document.getElementById('screen-login').style.display      = 'none';
@@ -18,6 +19,7 @@ function mostrarApp() {
   document.getElementById('screen-login').style.display      = 'none';
   document.getElementById('screen-onboarding').style.display = 'none';
   document.getElementById('screen-app').style.display        = 'block';
+  document.getElementById('bug-trigger').style.display       = 'flex';
   aplicarRestriccionesPorRol();
   renderJugadores();
 }
@@ -333,6 +335,93 @@ async function togglePermiso(userId, dar, btn) {
 
 function cerrarPanelMiembros() {
   document.getElementById('modal-miembros').classList.remove('open');
+}
+
+// ===================== REPORTAR BUG =====================
+
+let bugCatSeleccionada = null;
+let bugSevSeleccionada = null;
+
+function abrirReporteBug() {
+  document.getElementById('modal-bug').classList.add('open');
+}
+
+function cerrarReporteBug() {
+  document.getElementById('modal-bug').classList.remove('open');
+  setTimeout(resetFormBug, 300);
+}
+
+function seleccionarCatBug(el, cat) {
+  document.querySelectorAll('#bug-cat-grid .cat-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  bugCatSeleccionada = cat;
+}
+
+function seleccionarSevBug(el, sev) {
+  document.querySelectorAll('#bug-sev-row .sev-btn').forEach(b => b.className = 'sev-btn');
+  el.classList.add('sel-' + sev);
+  bugSevSeleccionada = sev;
+}
+
+function generarTicketId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'BUG-' + Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+async function enviarReporteBug() {
+  const desc = document.getElementById('bug-desc').value.trim();
+
+  if (!bugCatSeleccionada) { alert('Elegí qué tipo de problema es.'); return; }
+  if (!bugSevSeleccionada) { alert('Elegí el impacto del problema.'); return; }
+  if (!desc) { alert('Contanos qué pasó en la descripción.'); document.getElementById('bug-desc').focus(); return; }
+
+  const btn = document.getElementById('bug-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  const ticketId = generarTicketId();
+
+  try {
+    await sbFetch('bug_reports', {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: JSON.stringify({
+        ticket_id:   ticketId,
+        grupo_id:    grupoId || 'unknown',
+        user_id:     currentUser ? currentUser.id : null,
+        user_email:  currentUser ? currentUser.email : null,
+        categoria:   bugCatSeleccionada,
+        severidad:   bugSevSeleccionada,
+        descripcion: desc,
+        pasos:       document.getElementById('bug-pasos').value.trim() || null,
+        user_agent:  navigator.userAgent,
+        url_actual:  window.location.href,
+        viewport:    window.innerWidth + 'x' + window.innerHeight,
+      }),
+    });
+
+    document.getElementById('bug-form-state').style.display    = 'none';
+    document.getElementById('bug-success-state').style.display = 'block';
+    document.getElementById('bug-ticket-id').textContent       = ticketId;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Enviar reporte →';
+    alert('No se pudo enviar el reporte: ' + e.message);
+  }
+}
+
+function resetFormBug() {
+  bugCatSeleccionada = null;
+  bugSevSeleccionada = null;
+  document.querySelectorAll('#bug-cat-grid .cat-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('#bug-sev-row .sev-btn').forEach(b => b.className = 'sev-btn');
+  document.getElementById('bug-desc').value  = '';
+  document.getElementById('bug-pasos').value = '';
+  document.getElementById('bug-form-state').style.display    = 'block';
+  document.getElementById('bug-success-state').style.display = 'none';
+  const btn = document.getElementById('bug-submit-btn');
+  btn.disabled = false;
+  btn.textContent = 'Enviar reporte →';
 }
 
 // ===================== JUGADORES (solo admin puede agregar/editar/borrar) =====================
