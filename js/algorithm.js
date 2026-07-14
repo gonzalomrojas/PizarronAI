@@ -7,12 +7,18 @@
 //    cualquier distribución. Esto garantiza que nunca un equipo queda
 //    sin arco. Los ARQ extra van al pool normal.
 //
-//  PASO 2 — Greedy por rating
-//    Ordena el resto de mayor a menor rating y los va alternando
-//    al equipo con menor suma acumulada. Punto de partida razonable.
+//  PASO 2 — Greedy por rating, posición por posición
+//    Para DEF, MED y ATA por separado: ordena ese grupo de mayor a menor
+//    rating y lo va alternando al equipo con menor suma acumulada.
+//    Hacerlo posición por posición (en vez de mezclar a todos los de
+//    campo en una sola bolsa) evita que, por azar, un equipo se quede
+//    con todos los delanteros fuertes y el otro con todos los
+//    mediocampistas — reparte a los mejores de cada puesto entre los dos.
 //
-//  PASO 3 — Simulated Annealing
-//    Intenta SA_ITERATIONS swaps aleatorios entre equipos.
+//  PASO 3 — Simulated Annealing (solo dentro de la misma posición)
+//    Intenta SA_ITERATIONS swaps aleatorios entre equipos, pero solo
+//    entre jugadores de la MISMA posición — así afina el balance de
+//    puntos sin deshacer el reparto equitativo por puesto del Paso 2.
 //    - Si el swap mejora la diferencia: siempre lo acepta.
 //    - Si empeora: lo acepta con probabilidad exp(-Δ/T).
 //    La temperatura T baja con cada iteración (SA_COOLING),
@@ -30,8 +36,7 @@ function generarEquipos() {
     return;
   }
 
-  const arqs  = convocados.filter(j => j.pos === 'ARQ');
-  const resto = convocados.filter(j => j.pos !== 'ARQ').sort((a, b) => b.rating - a.rating);
+  const arqs = convocados.filter(j => j.pos === 'ARQ');
 
   let teamA = [], teamB = [];
   let sumA  = 0,  sumB  = 0;
@@ -55,10 +60,18 @@ function generarEquipos() {
     });
   }
 
-  // ---- PASO 2: Greedy para el resto ----
-  resto.forEach(j => {
-    if (sumA <= sumB) { teamA.push(j); sumA += j.rating; }
-    else              { teamB.push(j); sumB += j.rating; }
+  // ---- PASO 2: Greedy por posición (DEF, MED, ATA por separado) ----
+  // Reparte cada puesto de a uno por vez para que los mejores de cada
+  // posición queden distribuidos entre los dos equipos, en vez de que
+  // el rating global termine juntando a todos los delanteros de un lado.
+  ['DEF', 'MED', 'ATA'].forEach(pos => {
+    const grupo = convocados
+      .filter(j => (j.pos || 'MED') === pos)
+      .sort((a, b) => b.rating - a.rating);
+    grupo.forEach(j => {
+      if (sumA <= sumB) { teamA.push(j); sumA += j.rating; }
+      else              { teamB.push(j); sumB += j.rating; }
+    });
   });
 
   // ---- PASO 3: Simulated Annealing ----
@@ -75,6 +88,12 @@ function generarEquipos() {
     // No swappear los ARQ titulares (índice 0 de cada equipo cuando hay 2+ ARQ)
     if (arqs.length >= 2 && ja.pos === 'ARQ' && ia === 0) continue;
     if (arqs.length >= 2 && jb.pos === 'ARQ' && ib === 0) continue;
+
+    // Solo permite swaps entre jugadores de la misma posición — así el
+    // ajuste fino de puntos no deshace el reparto equitativo por puesto
+    // logrado en el Paso 2 (evita volver a juntar todos los delanteros
+    // de un lado y todos los mediocampistas del otro).
+    if ((ja.pos || 'MED') !== (jb.pos || 'MED')) continue;
 
     const diffActual = Math.abs(sumA - sumB);
     const nA = sumA - ja.rating + jb.rating;
