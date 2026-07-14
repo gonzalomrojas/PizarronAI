@@ -343,6 +343,10 @@ function rowToJugador(row) {
 async function cargarJugadores() {
   const rows = await sbFetch('jugadores?grupo_id=eq.' + grupoId + '&order=created_at.asc');
   state.jugadores = rows.map(rowToJugador);
+  // Descarta convocados "fantasma": IDs que quedaron guardados localmente
+  // pero ya no corresponden a ningún jugador real (borrado, otro dispositivo, etc.)
+  const idsValidos = new Set(state.jugadores.map(j => j.id));
+  state.convocados = state.convocados.filter(id => idsValidos.has(id));
 }
 
 async function syncJugador(j) {
@@ -418,6 +422,73 @@ async function syncPartido(p) {
 
 async function borrarPartido(id) {
   await sbFetch('partidos?id=eq.' + id + '&grupo_id=eq.' + grupoId, { method: 'DELETE', prefer: '' });
+}
+
+// ===================== PARTIDOS PENDIENTES DE RESULTADO =====================
+// Un partido "pendiente" es un registro de historial ya guardado (equipos +
+// snapshot) pero sin resultado cargado todavía (ganador == null). Se crea al
+// compartir el emparejamiento por WhatsApp, así el armado no depende de que
+// la sesión del navegador siga viva cuando volvés a cargar el resultado.
+
+function idsIguales(a, b) {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort(), sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
+}
+
+function buscarPendienteActual() {
+  if (!state.equipoA.length) return null;
+  return state.historial.find(p =>
+    p.ganador == null &&
+    idsIguales((p.equipoA || []).map(j => j.id), state.equipoA) &&
+    idsIguales((p.equipoB || []).map(j => j.id), state.equipoB)
+  ) || null;
+}
+
+function buscarFinalizadoActual() {
+  if (!state.equipoA.length) return null;
+  return state.historial.find(p =>
+    p.ganador != null &&
+    idsIguales((p.equipoA || []).map(j => j.id), state.equipoA) &&
+    idsIguales((p.equipoB || []).map(j => j.id), state.equipoB)
+  ) || null;
+}
+
+// Crea (si no existe ya) el registro pendiente para el emparejamiento actual.
+async function asegurarPartidoPendiente() {
+  if (!state.equipoA.length) return null;
+  const existente = buscarPendienteActual();
+  if (existente) return existente;
+
+  const jugA = state.jugadores.filter(j => state.equipoA.includes(j.id));
+  const jugB = state.jugadores.filter(j => state.equipoB.includes(j.id));
+  const partido = {
+    id:      Date.now().toString(),
+    fecha:   new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    hora:    new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}),
+    equipoA: jugA.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
+    equipoB: jugB.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
+    sumA: state.sumA || 0, sumB: state.sumB || 0,
+    golesA: null, golesB: null, ganador: null, balance_tag: null, resultado_tag: null,
+    snapshotJugadores: JSON.parse(JSON.stringify(state.jugadores)),
+  };
+  state.historial.unshift(partido);
+  saveState();
+  try { await syncPartido(partido); } catch(e) { /* se resincroniza al reintentar */ }
+  return partido;
+}
+
+// Calcula ganador / tags de balance y resultado a partir de los goles cargados
+function calcularResultadoPartido(sumA, sumB, ga, gb) {
+  const diff        = Math.abs(sumA - sumB);
+  const ganador     = ga > gb ? 'A' : gb > ga ? 'B' : 'Empate';
+  const balance_tag = diff < 1.5 ? 'parejos' : diff < 3.5 ? 'algo_desiguales' : 'desiguales';
+  let resultado_tag = 'empate';
+  if (ganador !== 'Empate') {
+    const fav = sumA > sumB ? 'A' : 'B';
+    resultado_tag = ganador === fav ? 'gano_favorito' : 'sorpresa';
+  }
+  return { ganador, balance_tag, resultado_tag };
 }
 
 // ===================== SESIÓN LOCAL =====================

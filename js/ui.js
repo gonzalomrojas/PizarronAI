@@ -284,7 +284,7 @@ function renderPartido() {
 
   lista.innerHTML = html;
 
-  const n    = state.convocados.length;
+  const n    = state.convocados.filter(id => getJugador(id)).length;
   const nArq = state.convocados.filter(id => {
     const j = getJugador(id);
     return j && j.pos === 'ARQ';
@@ -398,6 +398,49 @@ function actualizarVotoPreview(id) {
 
 // ===================== HISTORIAL =====================
 
+// Tarjeta de un partido guardado pero sin resultado todavía (se compartió
+// por WhatsApp y quedó pendiente de que el admin cargue el resultado).
+function renderCardPendiente(p, admin) {
+  const acciones = admin ? `
+    <div class="score-input" style="margin-top:8px">
+      <input type="number" class="score-box" id="pend-ga-${p.id}" min="0" max="99" value="0">
+      <span class="score-sep">—</span>
+      <input type="number" class="score-box" id="pend-gb-${p.id}" min="0" max="99" value="0">
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;font-size:12px"
+        onclick="guardarResultadoPendiente('${p.id}')">💾 Guardar resultado</button>
+      <button class="btn btn-secondary" style="flex:1;justify-content:center;font-size:12px"
+        onclick="descartarPendiente('${p.id}')">🗑 Descartar</button>
+    </div>`
+    : `<div class="alert alert-yellow" style="font-size:12px;margin-top:8px">
+        Esperando que el admin cargue el resultado.
+       </div>`;
+
+  return `
+    <div class="partido-hist" style="border-color:var(--yellow)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px">
+        <div class="partido-fecha">📅 ${p.fecha}${p.hora ? ' · ' + p.hora : ''}</div>
+        <span class="tag tag-yellow">⏳ Pendiente de resultado</span>
+      </div>
+      <div class="partido-equipos">
+        <div style="color:var(--green)">
+          <div class="partido-team-label">🟢 Equipo A · Σ${(p.sumA||0).toFixed(1)}</div>
+          ${(p.equipoA||[]).map(j => `<div class="partido-jugador">
+            ${(POS_CONFIG[j.pos||'MED']||POS_CONFIG.MED).icon} ${j.nombre}
+          </div>`).join('')}
+        </div>
+        <div style="color:var(--blue)">
+          <div class="partido-team-label">🔵 Equipo B · Σ${(p.sumB||0).toFixed(1)}</div>
+          ${(p.equipoB||[]).map(j => `<div class="partido-jugador">
+            ${(POS_CONFIG[j.pos||'MED']||POS_CONFIG.MED).icon} ${j.nombre}
+          </div>`).join('')}
+        </div>
+      </div>
+      ${acciones}
+    </div>`;
+}
+
 function renderHistorial() {
   const lista = document.getElementById('lista-historial');
   const admin = typeof esAdmin === 'function' && esAdmin();
@@ -408,8 +451,12 @@ function renderHistorial() {
       📝 Cargar partido manualmente
     </button>` : '';
 
-  if (!state.historial.length) {
-    lista.innerHTML = btnManual + `<div class="empty">Todavía no hay partidos guardados.<br><br>
+  const pendientes  = state.historial.filter(p => p.ganador == null);
+  const finalizados = state.historial.filter(p => p.ganador != null);
+  const pendientesHtml = pendientes.map(p => renderCardPendiente(p, admin)).join('');
+
+  if (!finalizados.length) {
+    lista.innerHTML = btnManual + pendientesHtml + `<div class="empty">Todavía no hay partidos guardados.<br><br>
       Cargá el resultado desde la pestaña Equipos o con el botón de arriba.</div>`;
     return;
   }
@@ -425,7 +472,7 @@ function renderHistorial() {
     return '<span class="tag tag-blue">🤝 Empate</span>';
   };
 
-  const cards = state.historial.map((p, idx) => {
+  const cards = finalizados.map((p, idx) => {
     const esUltimo    = idx === 0;
     const puedeUndo   = admin && esUltimo && !p.esManual && p.snapshotJugadores;
     const manualBadge = p.esManual ? '<span class="tag tag-blue" style="font-size:10px">✍️ Manual</span>' : '';
@@ -549,7 +596,7 @@ function renderHistorial() {
     </div>`;
   }).join('');
 
-  lista.innerHTML = btnManual + cards;
+  lista.innerHTML = btnManual + pendientesHtml + cards;
 }
 
 // ===================== MODAL EDITAR JUGADOR =====================

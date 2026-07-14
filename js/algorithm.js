@@ -129,13 +129,19 @@ function renderEquipos(teamA, teamB, sumA, sumB, nArqs, totalJugadores) {
         ⚠️ Solo hay ${nArqs} arquero. Los equipos quedaron sin ARQ dedicado.
        </div>` : '';
 
-  // Indicador de que ya hay resultado cargado para estos equipos
-  const yaGuardado = state.historial.length > 0 &&
-    state.historial[0].equipoA.some(j => state.equipoA.includes(j.id));
-  const guardadoBanner = yaGuardado
+  // Indicador de que este emparejamiento exacto ya está en el historial
+  const finalizado = typeof buscarFinalizadoActual === 'function' ? buscarFinalizadoActual() : null;
+  const pendiente   = !finalizado && typeof buscarPendienteActual === 'function' ? buscarPendienteActual() : null;
+  const yaGuardado  = !!finalizado;
+  const guardadoBanner = finalizado
     ? `<div class="alert alert-green" style="margin-top:8px;font-size:12px">
         ✅ Resultado ya guardado en historial.
-       </div>` : '';
+       </div>`
+    : pendiente
+      ? `<div class="alert alert-yellow" style="margin-top:8px;font-size:12px">
+          ⏳ Ya guardado en Historial, pendiente de resultado.
+         </div>`
+      : '';
 
   document.getElementById('equipos-output').innerHTML = `
     <div class="alert alert-green" style="text-align:center;padding:10px">

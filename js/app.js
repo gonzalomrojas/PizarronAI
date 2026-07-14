@@ -508,24 +508,23 @@ async function guardarPartido() {
   const jugB = state.jugadores.filter(j => state.equipoB.includes(j.id));
   const sumA = jugA.reduce((s,j) => s+j.rating, 0);
   const sumB = jugB.reduce((s,j) => s+j.rating, 0);
-  const diff = Math.abs(sumA - sumB);
-  const ganador     = ga > gb ? 'A' : gb > ga ? 'B' : 'Empate';
-  const balance_tag = diff < 1.5 ? 'parejos' : diff < 3.5 ? 'algo_desiguales' : 'desiguales';
-  let resultado_tag = 'empate';
-  if (ganador !== 'Empate') {
-    const fav = sumA > sumB ? 'A' : 'B';
-    resultado_tag = ganador === fav ? 'gano_favorito' : 'sorpresa';
-  }
   const snapshotJugadores = JSON.parse(JSON.stringify(state.jugadores));
-  const partido = {
-    id:      Date.now().toString(),
-    fecha:   new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
-    hora:    new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}),
+
+  // Si este emparejamiento ya se compartió por WhatsApp, reutiliza ese
+  // registro pendiente en vez de crear uno nuevo duplicado en el historial.
+  const pendiente = buscarPendienteActual();
+  const partido = pendiente || {
+    id:    Date.now().toString(),
+    fecha: new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    hora:  new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}),
+  };
+  Object.assign(partido, {
     equipoA: jugA.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
     equipoB: jugB.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
-    sumA, sumB, golesA:ga, golesB:gb, ganador, balance_tag, resultado_tag, snapshotJugadores,
-  };
-  state.historial.unshift(partido);
+    sumA, sumB, golesA: ga, golesB: gb, snapshotJugadores,
+    ...calcularResultadoPartido(sumA, sumB, ga, gb),
+  });
+  if (!pendiente) state.historial.unshift(partido);
   saveState();
   document.getElementById('seccion-resultado').style.display = 'none';
   document.getElementById('equipos-output').innerHTML +=
@@ -540,11 +539,48 @@ async function guardarPartido() {
   } catch(e) { setSyncError(); }
 }
 
+// Carga el resultado de un partido que quedó pendiente (compartido por
+// WhatsApp pero sin resultado todavía) desde la pestaña Historial.
+async function guardarResultadoPendiente(id) {
+  if (!esAdmin()) { alert('Solo el admin puede guardar el resultado.'); return; }
+  const partido = state.historial.find(p => p.id === id);
+  if (!partido) return;
+  const ga = parseInt(document.getElementById('pend-ga-' + id).value) || 0;
+  const gb = parseInt(document.getElementById('pend-gb-' + id).value) || 0;
+
+  Object.assign(partido, { golesA: ga, golesB: gb },
+    calcularResultadoPartido(partido.sumA || 0, partido.sumB || 0, ga, gb));
+
+  saveState(); renderHistorial();
+  setSyncing();
+  try {
+    await syncPartido(partido);
+    await abrirVotacionRendimiento(partido.id);
+    setSynced();
+  } catch(e) { setSyncError(); }
+}
+
+// Descarta un emparejamiento pendiente sin cargar resultado (p.ej. si al
+// final no se jugó).
+async function descartarPendiente(id) {
+  if (!esAdmin()) { alert('Solo el admin puede descartar el partido pendiente.'); return; }
+  if (!confirm('¿Descartar este emparejamiento? No se guardará ningún resultado.')) return;
+  state.historial = state.historial.filter(p => p.id !== id);
+  saveState(); renderHistorial();
+  setSyncing();
+  try { await borrarPartido(id); setSynced(); } catch(e) { setSyncError(); }
+}
+
 async function deshacerPartido(id) {
   if (!esAdmin()) { alert('Solo el admin puede deshacer partidos.'); return; }
   const idx = state.historial.findIndex(p => p.id === id);
   if (idx === -1) return;
-  if (idx !== 0)  { alert('Solo podés deshacer el último partido.'); return; }
+  // "Último partido" = el más reciente ya finalizado (puede haber un
+  // pendiente sin resultado por delante en el historial, eso no cuenta).
+  const finalizados = state.historial.filter(p => p.ganador != null);
+  if (!finalizados.length || finalizados[0].id !== id) {
+    alert('Solo podés deshacer el último partido.'); return;
+  }
   const partido = state.historial[idx];
   if (!confirm(`¿Deshacer ${partido.golesA}–${partido.golesB} del ${partido.fecha}?`)) return;
   if (partido.snapshotJugadores) state.jugadores = partido.snapshotJugadores;
@@ -947,6 +983,16 @@ function compartirEquiposPorWhatsApp() {
 
   const waUrl = 'https://wa.me/?text=' + encodeURIComponent(msg);
   window.open(waUrl, '_blank');
+
+  // Deja el emparejamiento guardado en Historial (pendiente de resultado),
+  // así no depende de que la sesión del navegador siga viva cuando volvés
+  // de WhatsApp a cargar el resultado. Se hace DESPUÉS de abrir la ventana
+  // para no romper el gesto de usuario que necesita window.open (si no,
+  // el navegador puede bloquear el popup por el await previo).
+  setSyncing();
+  asegurarPartidoPendiente()
+    .then(() => { setSynced(); if (typeof renderHistorial === 'function') renderHistorial(); })
+    .catch(() => setSyncError());
 }
 
 
