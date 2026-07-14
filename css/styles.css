@@ -223,7 +223,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px;
 .diff-bad  { color: var(--red);    }
 
 /* ===================== BUG REPORT ===================== */
-.bug-trigger { position: fixed; bottom: 16px; right: 16px; z-index: 300; background: var(--surface2); border: 1px solid var(--border); border-radius: 50px; padding: 9px 16px; align-items: center; gap: 7px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.bug-trigger { position: fixed; bottom: 16px; right: 16px; z-index: 300; background: var(--surface2); border: 1px solid var(--border); border-radius: 50px; padding: 9px 16px; align-items: center; gap: 7px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted); box-shadow: 0 4px 16px rgba(0,0,0,0.4); transition: bottom 0.15s ease; }
+/* Cuando la barra flotante de "Convocados / Armar equipos" está visible,
+   sube el botón de reportar problema para que no le tape el botón de
+   abajo (ambos son fixed y quedaban superpuestos). */
+.bug-trigger.sobre-float-bar { bottom: calc(76px + env(safe-area-inset-bottom)); }
 .bug-trigger:hover { border-color: var(--orange); color: var(--orange); }
 .bug-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); animation: bugPulse 2s ease infinite; }
 @keyframes bugPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }

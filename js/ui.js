@@ -19,6 +19,13 @@ function goTab(tab) {
   if (tab === 'historial') renderHistorial();
   if (tab === 'stats')     renderStats();
 
+  // La float-bar de Convocar solo existe en ese tab — en cualquier otro,
+  // el botón de reportar problema vuelve a su posición normal.
+  if (tab !== 'partido') {
+    const bt = document.getElementById('bug-trigger');
+    if (bt) bt.classList.remove('sobre-float-bar');
+  }
+
   updateWizard(tab);
 }
 
@@ -254,6 +261,8 @@ function renderPartido() {
   if (!state.jugadores.length) {
     lista.innerHTML = '<div class="empty">Primero agregá jugadores.</div>';
     floatBar.style.display = 'none';
+    const bt = document.getElementById('bug-trigger');
+    if (bt) bt.classList.remove('sobre-float-bar');
     return;
   }
 
@@ -292,7 +301,12 @@ function renderPartido() {
 
   document.getElementById('count-convocados').textContent = n;
   document.getElementById('warn-arq').classList.toggle('show', n >= 2 && nArq < 2);
-  floatBar.style.display = n >= 2 ? 'flex' : 'none';
+  const hayFloatBar = n >= 2;
+  floatBar.style.display = hayFloatBar ? 'flex' : 'none';
+  // La float-bar y el botón de "Reportar problema" son ambos fixed en la
+  // esquina inferior — sin esto, uno le tapa el click al otro.
+  const bt = document.getElementById('bug-trigger');
+  if (bt) bt.classList.toggle('sobre-float-bar', hayFloatBar);
 }
 
 // ===================== VOTAR =====================
