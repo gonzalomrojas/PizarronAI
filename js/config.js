@@ -58,6 +58,8 @@ const POS_CONFIG = {
   }
 };
 
+const POS_ORDER = ['ARQ', 'DEF', 'MED', 'ATA'];
+
 // ===================== CONSTANTES DE RATING =====================
 const RECENT_N      = 5;
 const RECENT_WEIGHT = 3;

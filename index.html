@@ -83,9 +83,11 @@
 
     /* ---- EDITAR JUGADORES DE PARTIDO ---- */
     .ejp-jugador {
-      display:flex; align-items:center; justify-content:space-between;
       padding:6px 0; border-bottom:1px solid var(--border); font-size:13px;
     }
+    .ejp-fila { display:flex; align-items:center; justify-content:space-between; }
+    .ejp-pos  { display:flex; gap:4px; margin-top:5px; }
+    .ejp-pos .pos-chip { padding:3px 7px; font-size:13px; }
     .ejp-jugador .btn-quitar {
       background:#2a0a0a; color:var(--red); border:1px solid #4a1010;
       border-radius:4px; font-size:11px; padding:2px 7px; cursor:pointer;
@@ -549,6 +551,17 @@
   </div>
 </div>
 
+<!-- MODAL: MIS POSICIONES (jugador vinculado) -->
+<div class="modal-overlay" id="modal-posiciones">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarMisPosiciones()">✕</button>
+    <div class="modal-title">⚙️ Mis posiciones</div>
+    <div class="modal-sub">Elegí tu posición principal y las otras en las que solés jugar.</div>
+    <div id="editor-pos-propio"></div>
+    <button class="btn btn-primary btn-full" onclick="guardarMisPosiciones()" style="margin-top:16px">💾 Guardar</button>
+  </div>
+</div>
+
 <!-- MODAL: PEGAR LISTA DE WHATSAPP -->
 <div class="modal-overlay" id="modal-pegar-lista">
   <div class="modal">
@@ -600,8 +613,8 @@
 <div class="modal-overlay" id="modal-editar-jugadores-partido">
   <div class="modal">
     <button class="modal-close" onclick="cerrarEditarJugadoresPartido()">✕</button>
-    <div class="modal-title">👥 Editar jugadores del partido</div>
-    <div class="modal-sub">Agregá o quitá jugadores de cada equipo. Solo el admin puede hacer esto.</div>
+    <div class="modal-title">👥 Jugadores y posiciones</div>
+    <div class="modal-sub">Marcá en qué posición jugó cada uno — la votación de rendimiento vota esos atributos. También podés agregar o quitar jugadores.</div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div>

@@ -259,3 +259,18 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px;
 .pegar-original { flex: 0 0 38%; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pegar-fila select { flex: 1; padding: 7px 9px; font-size: 13px; }
 .pegar-resumen { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+/* ===================== POSICIONES (chips) ===================== */
+.pos-chip { border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; padding: 4px 9px; cursor: pointer; transition: all 0.15s; }
+.pos-chip.suele { color: var(--text); }
+.pos-chip.sel-ARQ { border-color: var(--yellow); color: var(--yellow); background: #1f1a00; }
+.pos-chip.sel-DEF { border-color: var(--blue);   color: var(--blue);   background: #0a102a; }
+.pos-chip.sel-MED { border-color: var(--green);  color: var(--green);  background: #0a1f0a; }
+.pos-chip.sel-ATA { border-color: var(--red);    color: var(--red);    background: #2a0a0a; }
+.voto-pos-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin: 4px 0 8px; }
+.voto-pos-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 2px; }
+.voto-subtitulo { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px; }
+.fifa-pos-chips { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
+.fifa-pos-chips .pos-chip { font-size: 9px; padding: 2px 7px; }
+.editor-pos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.editor-pos-sec { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -471,14 +471,17 @@ async function eliminarJugador(id) {
 async function guardarEdicion() {
   if (!esAdmin()) { alert('Solo el admin puede editar jugadores.'); return; }
   const j = getJugador(editandoId); if (!j) return;
-  const pos = j.pos || 'MED';
-  const cfg = POS_CONFIG[pos];
+  j.pos        = _editorPos.pos;
+  j.posiciones = [..._editorPos.sec];
   const newRating = parseFloat(document.getElementById('edit-rating').value);
   j.rating = newRating;
   if (!j.historial_votos) j.historial_votos = [];
   j.historial_votos[j.historial_votos.length - 1] = newRating;
   if (!j.attrs) j.attrs = {};
-  cfg.attrs.forEach(a => { j.attrs[a.key] = parseFloat(document.getElementById('edit-attr-' + a.key).value); });
+  POS_ORDER.forEach(p => POS_CONFIG[p].attrs.forEach(a => {
+    const el = document.getElementById('edit-attr-' + a.key);
+    if (el) j.attrs[a.key] = parseFloat(el.value);
+  }));
   // Guardar atributos generales
   if (!j.attrs_generales) j.attrs_generales = {};
   ATTRS_GENERALES.forEach(a => {
@@ -488,6 +491,23 @@ async function guardarEdicion() {
   cerrarModal(); renderJugadores();
   setSyncing();
   try { await syncJugador(j); setSynced(); } catch(e) { setSyncError(); }
+}
+
+// El jugador vinculado edita solo sus posiciones (PATCH de esas dos columnas,
+// para no pisar rating ni atributos con lo que tenga cargado localmente).
+async function guardarMisPosiciones() {
+  const j = getJugadorDelUsuarioActual(); if (!j) return;
+  j.pos        = _editorPos.pos;
+  j.posiciones = [..._editorPos.sec];
+  cerrarMisPosiciones(); renderJugadores();
+  setSyncing();
+  try {
+    await sbFetch('jugadores?id=eq.' + j.id, {
+      method: 'PATCH',
+      body:   JSON.stringify({ pos: j.pos, posiciones: j.posiciones }),
+    });
+    setSynced();
+  } catch(e) { setSyncError(); alert('No se pudieron guardar tus posiciones: ' + e.message); }
 }
 
 // ===================== PARTIDO =====================
@@ -673,8 +693,8 @@ async function guardarPartido() {
     hora:  new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}),
   };
   Object.assign(partido, {
-    equipoA: jugA.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
-    equipoB: jugB.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
+    equipoA: jugA.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:posEnEquipo(j)})),
+    equipoB: jugB.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:posEnEquipo(j)})),
     sumA, sumB, golesA: ga, golesB: gb, snapshotJugadores,
     ...calcularResultadoPartido(sumA, sumB, ga, gb),
   });
@@ -757,24 +777,13 @@ async function guardarVotos() {
   const convocados = state.jugadores.filter(j => state.convocados.includes(j.id));
   if (!convocados.length) { alert('No hay jugadores convocados.'); return; }
   convocados.forEach(j => {
-    const pos = j.pos || 'MED';
-    const cfg = POS_CONFIG[pos];
-    let sum   = 0;
-    cfg.attrs.forEach(a => {
-      const el = document.getElementById('vote-' + j.id + '-' + a.key); if(!el) return;
-      const voto = parseFloat(el.value); sum += voto;
-      if (!j.attrs) j.attrs = {};
-      if (!j.historial_votos_attrs) j.historial_votos_attrs = {};
-      if (!j.historial_votos_attrs[a.key]) j.historial_votos_attrs[a.key] = [j.attrs[a.key] || j.rating];
-      j.historial_votos_attrs[a.key].push(voto);
-      const va = j.historial_votos_attrs[a.key], na = va.length;
-      let sp=0, sv=0;
-      va.forEach((v,i) => { const p=i>=na-RECENT_N?RECENT_WEIGHT:1; sp+=p; sv+=v*p; });
-      j.attrs[a.key] = sv/sp;
-    });
-    const avg = sum / cfg.attrs.length;
+    const voto = leerVotoJugador('vote', j.id); if (!voto) return;
+    if (!j.attrs)           j.attrs = {};
+    if (!j.attrs_generales) j.attrs_generales = defaultAttrsGenerales(j.rating);
+    Object.entries(voto.posVals).forEach(([k, v]) => { j.attrs[k] = acumularVotoAttr(j, k, v, j.attrs[k]); });
+    Object.entries(voto.genVals).forEach(([k, v]) => { j.attrs_generales[k] = acumularVotoAttr(j, 'gen_' + k, v, j.attrs_generales[k]); });
     if (!j.historial_votos) j.historial_votos = [j.rating];
-    j.historial_votos.push(avg);
+    j.historial_votos.push(voto.promedio);
     j.rating      = calcRatingConDecaimiento(j);
     j.votos_count = (j.votos_count||0) + 1;
     j.partidos    = (j.partidos||0) + 1;
@@ -942,17 +951,25 @@ function abrirEditarJugadoresPartido(partidoId) {
     .map(j => `<option value="${j.id}">${j.nombre} (${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon})</option>`)
     .join('');
 
-  document.getElementById('ejp-equipo-a').innerHTML = p.equipoA.map(j =>
-    `<div class="ejp-jugador">
-      <span>${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre}</span>
-      <button class="btn-quitar" onclick="quitarJugadorDeEquipo('${partidoId}','${j.id}','A')">✕</button>
-    </div>`).join('') || '<div style="color:var(--muted);font-size:12px">Sin jugadores</div>';
-
-  document.getElementById('ejp-equipo-b').innerHTML = p.equipoB.map(j =>
-    `<div class="ejp-jugador">
-      <span>${(POS_CONFIG[j.pos]||POS_CONFIG.MED).icon} ${j.nombre}</span>
-      <button class="btn-quitar" onclick="quitarJugadorDeEquipo('${partidoId}','${j.id}','B')">✕</button>
-    </div>`).join('') || '<div style="color:var(--muted);font-size:12px">Sin jugadores</div>';
+  // Cada jugador con la posición en la que jugó ese partido: viene la del
+  // armado de equipos y el admin la corrige si jugó en otro lado. La
+  // votación de rendimiento vota los atributos de esta posición.
+  const filaJugador = (j, equipo) => {
+    const posJ = j.pos || 'MED';
+    const chips = POS_ORDER.map(p2 => `<button type="button" class="pos-chip ${p2 === posJ ? 'sel-' + p2 : ''}"
+        title="${POS_CONFIG[p2].label}"
+        onclick="setPosJugadaPartido('${partidoId}','${j.id}','${equipo}','${p2}')">${POS_CONFIG[p2].icon}</button>`).join('');
+    return `<div class="ejp-jugador">
+      <div class="ejp-fila">
+        <span>${j.nombre}</span>
+        <button class="btn-quitar" onclick="quitarJugadorDeEquipo('${partidoId}','${j.id}','${equipo}')">✕</button>
+      </div>
+      <div class="ejp-pos">${chips}</div>
+    </div>`;
+  };
+  const vacio = '<div style="color:var(--muted);font-size:12px">Sin jugadores</div>';
+  document.getElementById('ejp-equipo-a').innerHTML = p.equipoA.map(j => filaJugador(j, 'A')).join('') || vacio;
+  document.getElementById('ejp-equipo-b').innerHTML = p.equipoB.map(j => filaJugador(j, 'B')).join('') || vacio;
 
   document.getElementById('ejp-disponibles').innerHTML = optsDisp
     ? `<select id="ejp-select-jugador" style="margin-bottom:8px">${optsDisp}</select>
@@ -967,6 +984,13 @@ function abrirEditarJugadoresPartido(partidoId) {
 
 function cerrarEditarJugadoresPartido() {
   document.getElementById('modal-editar-jugadores-partido').classList.remove('open');
+}
+
+function setPosJugadaPartido(partidoId, jugadorId, equipo, pos) {
+  const p = state.historial.find(h => h.id === partidoId); if (!p) return;
+  const j = (equipo === 'A' ? p.equipoA : p.equipoB).find(x => x.id === jugadorId);
+  if (j) j.pos = pos;
+  abrirEditarJugadoresPartido(partidoId);  // re-render modal
 }
 
 function quitarJugadorDeEquipo(partidoId, jugadorId, equipo) {
@@ -1227,25 +1251,16 @@ async function abrirFormVotacionRendimiento(partidoId) {
   btnGuard.textContent    = '✅ Enviar votación';
 
   cuerpo.innerHTML = aVotar.map(j => {
-    const pos = j.pos || 'MED';
-    const cfg = POS_CONFIG[pos];
-    const jState = state.jugadores.find(p => p.id === j.id);
-
-    const attrsHtml = cfg.attrs.map(a => {
-      const cur = (jState && jState.attrs && jState.attrs[a.key] != null)
-        ? jState.attrs[a.key] : 5;
-      return `<div class="attr-vote-row">
-        <span class="attr-vote-label">${a.label}</span>
-        <input type="range" id="vr-${j.id}-${a.key}"
-          min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
-          oninput="document.getElementById('vrv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
-        <span class="attr-vote-val" id="vrv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
-      </div>`;
-    }).join('');
+    // j viene del snapshot del partido: su pos es la del día (por defecto en
+    // "Jugó de"); los valores actuales de los atributos salen de la plantilla.
+    const jState = state.jugadores.find(p => p.id === j.id) || { ...j, attrs: {}, attrs_generales: {} };
+    const pos = j.pos || jState.pos || 'MED';
+    const cfg = POS_CONFIG[jState.pos || pos];
+    const attrsHtml = renderVotoJugador(jState, 'vr', pos, true);
 
     return `<div class="vote-player" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
-        <div class="avatar avatar-${pos}" style="width:36px;height:36px;font-size:14px">
+        <div class="avatar avatar-${jState.pos || pos}" style="width:36px;height:36px;font-size:14px">
           ${j.nombre[0].toUpperCase()}
         </div>
         <div>
@@ -1284,18 +1299,11 @@ async function enviarVotosRendimiento() {
 
   const votosMap = {};
   aVotar.forEach(j => {
-    const pos = j.pos || 'MED';
-    const cfg = POS_CONFIG[pos];
-    const attrs_votos = {};
-    let sum = 0;
-    cfg.attrs.forEach(a => {
-      const el = document.getElementById('vr-' + j.id + '-' + a.key);
-      const val = el ? parseFloat(el.value) : 5;
-      attrs_votos[a.key] = val;
-      sum += val;
-    });
-    const promedio = sum / cfg.attrs.length;
-    votosMap[j.id] = { attrs_votos, promedio };
+    const voto = leerVotoJugador('vr', j.id); if (!voto) return;
+    votosMap[j.id] = {
+      attrs_votos: { ...voto.posVals, ...voto.genVals },
+      promedio:    voto.promedio,
+    };
   });
 
   try {
@@ -1424,6 +1432,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('modal-partido-manual').addEventListener('click', function(e) {
     if (e.target === this) cerrarModalManual();
+  });
+  document.getElementById('modal-posiciones').addEventListener('click', function(e) {
+    if (e.target === this) cerrarMisPosiciones();
   });
   document.getElementById('modal-pegar-lista').addEventListener('click', function(e) {
     if (e.target === this) cerrarPegarLista();

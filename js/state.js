@@ -319,6 +319,7 @@ async function quitarPermisoVotacion(userId) {
 function jugadorToRow(j) {
   return {
     id: j.id, grupo_id: grupoId, nombre: j.nombre, pos: j.pos || 'MED',
+    posiciones: j.posiciones || [],
     rating: j.rating, attrs: j.attrs || {},
     attrs_generales: j.attrs_generales || {},
     historial_votos: j.historial_votos || [j.rating],
@@ -331,6 +332,7 @@ function jugadorToRow(j) {
 function rowToJugador(row) {
   return {
     id: row.id, nombre: row.nombre, pos: row.pos, rating: row.rating,
+    posiciones: row.posiciones || [],
     attrs: row.attrs || {},
     attrs_generales: row.attrs_generales || {},
     historial_votos: row.historial_votos || [row.rating],
@@ -466,8 +468,8 @@ async function asegurarPartidoPendiente() {
     id:      Date.now().toString(),
     fecha:   new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
     hora:    new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}),
-    equipoA: jugA.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
-    equipoB: jugB.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:j.pos||'MED'})),
+    equipoA: jugA.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:posEnEquipo(j)})),
+    equipoB: jugB.map(j => ({id:j.id, nombre:j.nombre, rating:j.rating, pos:posEnEquipo(j)})),
     sumA: state.sumA || 0, sumB: state.sumB || 0,
     golesA: null, golesB: null, ganador: null, balance_tag: null, resultado_tag: null,
     snapshotJugadores: JSON.parse(JSON.stringify(state.jugadores)),
@@ -529,6 +531,39 @@ function defaultAttrs(pos, r) {
   POS_CONFIG[pos].attrs.forEach(x => { a[x.key] = r; });
   return a;
 }
+// Posición con la que el algoritmo lo puso en el equipo actual (puede
+// ser ARQ aunque su principal sea otra, si se lo usó de arquero).
+function posEnEquipo(j) {
+  const snap = [...(state.equipoASnapshot || []), ...(state.equipoBSnapshot || [])].find(s => s.id === j.id);
+  return (snap && snap.pos) || j.pos || 'MED';
+}
+
+// Principal primero, después las secundarias en el orden de la cancha.
+function posicionesDe(j) {
+  const principal = j.pos || 'MED';
+  const extra = (j.posiciones || []).filter(p => p !== principal);
+  return [principal, ...POS_ORDER.filter(p => extra.includes(p))];
+}
+
+// Agrega un voto al historial del atributo y devuelve el valor con decaimiento.
+// hkey es la clave del historial ('gen_' + key para los generales).
+function acumularVotoAttr(j, hkey, voto, actual) {
+  if (!j.historial_votos_attrs) j.historial_votos_attrs = {};
+  if (!j.historial_votos_attrs[hkey]) j.historial_votos_attrs[hkey] = [actual != null ? actual : j.rating];
+  j.historial_votos_attrs[hkey].push(voto);
+  const va = j.historial_votos_attrs[hkey], na = va.length;
+  let sp = 0, sv = 0;
+  va.forEach((v, i) => { const pw = i >= na - RECENT_N ? RECENT_WEIGHT : 1; sp += pw; sv += v * pw; });
+  return sv / sp;
+}
+
+// Promedio de un voto: mitad el puesto en que jugó, mitad los generales.
+function promedioVoto(attrsPos, attrsGen) {
+  const prom = arr => arr.reduce((s, x) => s + x, 0) / arr.length;
+  if (!attrsGen.length) return prom(attrsPos);
+  return (prom(attrsPos) + prom(attrsGen)) / 2;
+}
+
 function defaultAttrsGenerales(r) {
   const a = {};
   ATTRS_GENERALES.forEach(x => { a[x.key] = r; });
@@ -651,35 +686,24 @@ async function aplicarVotosRendimientoAJugadores(partidoId) {
   Object.entries(porJugador).forEach(([jugId, votosJug]) => {
     const j = state.jugadores.find(p => p.id === jugId);
     if (!j) return;
-    const cfg = POS_CONFIG[j.pos || 'MED'];
-    if (!j.historial_votos_attrs) j.historial_votos_attrs = {};
-    if (!j.attrs_generales)       j.attrs_generales = defaultAttrsGenerales(j.rating);
+    if (!j.attrs)           j.attrs = {};
+    if (!j.attrs_generales) j.attrs_generales = defaultAttrsGenerales(j.rating);
+    const promedioDe = key => {
+      const vals = votosJug.map(v => v.attrs_votos[key]).filter(x => x != null);
+      return vals.length ? vals.reduce((s,x) => s+x, 0) / vals.length : null;
+    };
 
-    // Atributos de posición
-    cfg.attrs.forEach(a => {
-      const vals = votosJug.map(v => v.attrs_votos[a.key]).filter(x => x != null);
-      if (!vals.length) return;
-      const avg = vals.reduce((s,x) => s+x, 0) / vals.length;
-      if (!j.historial_votos_attrs[a.key]) j.historial_votos_attrs[a.key] = [j.attrs[a.key] || j.rating];
-      j.historial_votos_attrs[a.key].push(avg);
-      const va = j.historial_votos_attrs[a.key], na = va.length;
-      let sp=0, sv=0;
-      va.forEach((v,i) => { const pw=i>=na-RECENT_N?RECENT_WEIGHT:1; sp+=pw; sv+=v*pw; });
-      j.attrs[a.key] = sv/sp;
-    });
+    // Atributos de posición — cada votante eligió de qué jugó, así que
+    // puede haber votos para cualquiera de las cuatro posiciones.
+    POS_ORDER.forEach(pos => POS_CONFIG[pos].attrs.forEach(a => {
+      const avg = promedioDe(a.key);
+      if (avg != null) j.attrs[a.key] = acumularVotoAttr(j, a.key, avg, j.attrs[a.key]);
+    }));
 
     // Atributos generales
     ATTRS_GENERALES.forEach(a => {
-      const vals = votosJug.map(v => v.attrs_votos[a.key]).filter(x => x != null);
-      if (!vals.length) return;
-      const avg  = vals.reduce((s,x) => s+x, 0) / vals.length;
-      const hkey = 'gen_' + a.key;
-      if (!j.historial_votos_attrs[hkey]) j.historial_votos_attrs[hkey] = [j.attrs_generales[a.key] || j.rating];
-      j.historial_votos_attrs[hkey].push(avg);
-      const va = j.historial_votos_attrs[hkey], na = va.length;
-      let sp=0, sv=0;
-      va.forEach((v,i) => { const pw=i>=na-RECENT_N?RECENT_WEIGHT:1; sp+=pw; sv+=v*pw; });
-      j.attrs_generales[a.key] = sv/sp;
+      const avg = promedioDe(a.key);
+      if (avg != null) j.attrs_generales[a.key] = acumularVotoAttr(j, 'gen_' + a.key, avg, j.attrs_generales[a.key]);
     });
 
     const promGen = votosJug.reduce((s,v) => s+v.promedio, 0) / votosJug.length;

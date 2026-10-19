@@ -137,8 +137,10 @@ function renderFifaCard(j, clickable = false) {
     : trend === 'dn' ? '<span class="trend trend-dn">↓ Bajando</span>'
     : trend === 'eq' ? '<span class="trend trend-eq">→ Estable</span>' : '';
 
-  // Atributos de posición con barra
-  const attrsHtml = cfg.attrs.map(a => {
+  // Atributos de cada posición en la que juega — se ve la principal y los
+  // chips permiten cambiar a las secundarias.
+  const posiciones = posicionesDe(j);
+  const attrsDe = p => POS_CONFIG[p].attrs.map(a => {
     const val = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
     const pct = (val / 10) * 100;
     return `<div class="fifa-attr">
@@ -146,11 +148,22 @@ function renderFifaCard(j, clickable = false) {
       <div style="flex:1">
         <div class="fifa-attr-name">${a.label}</div>
         <div class="fifa-attr-bar">
-          <div class="fifa-attr-fill fill-${pos}" style="width:${pct}%"></div>
+          <div class="fifa-attr-fill fill-${p}" style="width:${pct}%"></div>
         </div>
       </div>
     </div>`;
   }).join('');
+  const chipsPos = posiciones.length > 1 ? `<div class="fifa-pos-chips">${posiciones.map(p =>
+    `<button type="button" class="pos-chip suele ${p === pos ? 'sel-' + p : ''}" data-pos="${p}"
+      onclick="verPosCarta(this)">${POS_CONFIG[p].icon} ${POS_CONFIG[p].label.substring(0,3).toUpperCase()}</button>`
+  ).join('')}</div>` : '';
+  const bloquesPos = posiciones.map(p => `<div class="fifa-pos-block" data-pos="${p}" ${p === pos ? '' : 'style="display:none"'}>
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">
+        ${POS_CONFIG[p].icon} Atributos ${POS_CONFIG[p].label}
+      </div>
+      <div class="fifa-attrs">${attrsDe(p)}</div>
+    </div>`).join('');
+  const tambien = posiciones.slice(1).map(p => POS_CONFIG[p].icon).join('');
 
   // Atributos generales — chips numéricos
   const gen = j.attrs_generales || {};
@@ -173,7 +186,7 @@ function renderFifaCard(j, clickable = false) {
         <div class="fifa-avatar fifa-avatar-${pos}">${j.nombre[0].toUpperCase()}</div>
         <div class="fifa-info">
           <div class="fifa-name">${j.nombre}</div>
-          <div class="fifa-meta">${j.partidos||0} partido${(j.partidos||0)!==1?'s':''} · ${cfg.icon} ${cfg.label}</div>
+          <div class="fifa-meta">${j.partidos||0} partido${(j.partidos||0)!==1?'s':''} · ${cfg.icon} ${cfg.label}${tambien ? ' · también ' + tambien : ''}</div>
           <div class="decay-info">${trendHtml}<span style="margin-left:auto">${nVotos} votos</span></div>
         </div>
       </div>
@@ -182,10 +195,8 @@ function renderFifaCard(j, clickable = false) {
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
         ${renderRadarSVG(j, pos)}
         <div style="flex:1">
-          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">
-            ${cfg.icon} Atributos ${cfg.label}
-          </div>
-          <div class="fifa-attrs">${attrsHtml}</div>
+          ${chipsPos}
+          ${bloquesPos}
         </div>
       </div>
 
@@ -205,6 +216,16 @@ function renderFifaCard(j, clickable = false) {
     </div>`;
 }
 
+function verPosCarta(chip) {
+  const card = chip.closest('.fifa-card');
+  const pos  = chip.dataset.pos;
+  card.querySelectorAll('.fifa-pos-chips .pos-chip').forEach(b => {
+    POS_ORDER.forEach(p => b.classList.remove('sel-' + p));
+    if (b.dataset.pos === pos) b.classList.add('sel-' + pos);
+  });
+  card.querySelectorAll('.fifa-pos-block').forEach(b => { b.style.display = b.dataset.pos === pos ? '' : 'none'; });
+}
+
 function renderJugadores() {
   const lista = document.getElementById('lista-jugadores');
 
@@ -221,7 +242,8 @@ function renderJugadores() {
           🎴 MI CARTA
         </div>
         ${renderFifaCard(jpActual, false)}
-        <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:-4px;margin-bottom:12px">
+        <button class="btn btn-secondary btn-full" style="margin:-4px 0 8px" onclick="abrirMisPosiciones()">⚙️ Mis posiciones</button>
+        <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">
           Tu jugador vinculado · Rating actualizado con tus últimos partidos
         </div>`;
     } else {
@@ -284,7 +306,7 @@ function renderPartido() {
         <div class="avatar avatar-${pos}">${j.nombre[0].toUpperCase()}</div>
         <div style="flex:1">
           <div class="player-name">${j.nombre}</div>
-          <div class="player-sub">${cfg.icon} ${cfg.label} · ${j.rating.toFixed(1)} OVR</div>
+          <div class="player-sub">${cfg.icon} ${cfg.label}${posicionesDe(j).length > 1 ? ' · también ' + posicionesDe(j).slice(1).map(p => POS_CONFIG[p].icon).join('') : ''} · ${j.rating.toFixed(1)} OVR</div>
         </div>
         <div class="player-score">${j.rating.toFixed(1)}</div>
       </div>`;
@@ -296,7 +318,7 @@ function renderPartido() {
   const n    = state.convocados.filter(id => getJugador(id)).length;
   const nArq = state.convocados.filter(id => {
     const j = getJugador(id);
-    return j && j.pos === 'ARQ';
+    return j && posicionesDe(j).includes('ARQ');
   }).length;
 
   document.getElementById('count-convocados').textContent = n;
@@ -340,41 +362,13 @@ function prepararVotacion() {
   const lista = document.getElementById('lista-votos');
 
   lista.innerHTML = convocados.map(j => {
-    const pos = j.pos || 'MED';
-    const cfg = POS_CONFIG[pos];
-    const gen = j.attrs_generales || {};
-    const attrsHtml = [
-      // Atributos de posición
-      `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:6px 0 4px">
-        ${cfg.icon} ${cfg.label}
-      </div>`,
-      ...cfg.attrs.map(a => {
-        const cur = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
-        return `<div class="attr-vote-row">
-          <span class="attr-vote-label">${a.label}</span>
-          <input type="range" id="vote-${j.id}-${a.key}" min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
-            oninput="document.getElementById('vv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
-          <span class="attr-vote-val" id="vv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
-        </div>`;
-      }),
-      // Atributos generales
-      `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px">
-        ⚽ Atributos generales
-      </div>`,
-      ...ATTRS_GENERALES.map(a => {
-        const cur = gen[a.key] != null ? gen[a.key] : j.rating;
-        return `<div class="attr-vote-row">
-          <span class="attr-vote-label">${a.icon} ${a.label}</span>
-          <input type="range" id="vote-${j.id}-${a.key}" min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
-            oninput="document.getElementById('vv-${j.id}-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
-          <span class="attr-vote-val" id="vv-${j.id}-${a.key}">${cur.toFixed(1)}</span>
-        </div>`;
-      }),
-    ].join('');
+    const pos = posEnEquipo(j);
+    const cfg = POS_CONFIG[j.pos || 'MED'];
+    const attrsHtml = renderVotoJugador(j, 'vote', pos);
 
     return `<div class="vote-player">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
-        <div class="avatar avatar-${pos}" style="width:38px;height:38px;font-size:16px">${j.nombre[0].toUpperCase()}</div>
+        <div class="avatar avatar-${j.pos || 'MED'}" style="width:38px;height:38px;font-size:16px">${j.nombre[0].toUpperCase()}</div>
         <div>
           <div class="vote-name">${j.nombre}</div>
           <div style="font-size:11px;color:var(--muted)">
@@ -396,18 +390,82 @@ function prepararVotacion() {
 }
 
 function actualizarVotoPreview(id) {
-  const j   = getJugador(id); if (!j) return;
-  const pos = j.pos || 'MED';
-  const cfg = POS_CONFIG[pos];
-  let sum   = 0;
-  cfg.attrs.forEach(a => {
-    const el = document.getElementById('vote-' + id + '-' + a.key);
-    if (el) sum += parseFloat(el.value);
+  const j = getJugador(id); if (!j) return;
+  const voto = leerVotoJugador('vote', id); if (!voto) return;
+  const el   = document.getElementById('preview-ovr-' + id);
+  if (el) el.textContent = simularNuevoRating(j, voto.promedio).toFixed(1);
+}
+
+// ===================== BLOQUE DE VOTO POR JUGADOR =====================
+// Compartido por la pestaña Votar (prefix 'vote') y el modal de votar
+// rendimiento (prefix 'vr'). Se elige de qué jugó ese día y se votan los
+// 4 atributos de esa posición + los 6 generales.
+
+function sliderVoto(prefix, jid, key, label, cur) {
+  const extra = prefix === 'vote' ? `actualizarVotoPreview('${jid}');` : '';
+  return `<div class="attr-vote-row">
+    <span class="attr-vote-label">${label}</span>
+    <input type="range" id="${prefix}-${jid}-${key}" min="1" max="10" step="0.5" value="${cur.toFixed(1)}"
+      oninput="document.getElementById('${prefix}v-${jid}-${key}').textContent=parseFloat(this.value).toFixed(1);${extra}">
+    <span class="attr-vote-val" id="${prefix}v-${jid}-${key}">${cur.toFixed(1)}</span>
+  </div>`;
+}
+
+function renderSlidersPosVoto(j, prefix, pos) {
+  return POS_CONFIG[pos].attrs.map(a => {
+    const cur = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
+    return sliderVoto(prefix, j.id, a.key, a.label, cur);
+  }).join('');
+}
+
+// fija = true: la posición ya la definió el admin en el partido, se muestra
+// sin selector (así todos los votantes votan los mismos atributos).
+function renderVotoJugador(j, prefix, posInicial, fija = false) {
+  const pos   = posInicial || j.pos || 'MED';
+  const suele = posicionesDe(j);
+  const gen   = j.attrs_generales || {};
+  const chips = POS_ORDER.map(p => `<button type="button"
+      class="pos-chip ${p === pos ? 'sel-' + p : ''} ${suele.includes(p) ? 'suele' : ''}"
+      onclick="elegirPosVoto('${prefix}','${j.id}','${p}')">${POS_CONFIG[p].icon} ${POS_CONFIG[p].label.substring(0,3).toUpperCase()}</button>`
+  ).join('');
+  return `
+    <div class="voto-pos-row" id="${prefix}-pos-${j.id}" data-pos="${pos}">
+      <span class="voto-pos-label">Jugó de</span>${fija
+        ? `<span class="pos-chip sel-${pos}" style="cursor:default">${POS_CONFIG[pos].icon} ${POS_CONFIG[pos].label}</span>`
+        : chips}
+    </div>
+    <div id="${prefix}-attrs-${j.id}">${renderSlidersPosVoto(j, prefix, pos)}</div>
+    <div class="voto-subtitulo">⚽ Atributos generales</div>
+    ${ATTRS_GENERALES.map(a => sliderVoto(prefix, j.id, a.key, a.icon + ' ' + a.label,
+        gen[a.key] != null ? gen[a.key] : j.rating)).join('')}`;
+}
+
+function elegirPosVoto(prefix, jid, pos) {
+  const j   = getJugador(jid);
+  const row = document.getElementById(prefix + '-pos-' + jid);
+  if (!j || !row) return;
+  row.dataset.pos = pos;
+  row.querySelectorAll('.pos-chip').forEach((b, i) => {
+    POS_ORDER.forEach(p => b.classList.remove('sel-' + p));
+    if (POS_ORDER[i] === pos) b.classList.add('sel-' + pos);
   });
-  const avg       = sum / cfg.attrs.length;
-  const simulado  = simularNuevoRating(j, avg);
-  const el        = document.getElementById('preview-ovr-' + id);
-  if (el) el.textContent = simulado.toFixed(1);
+  document.getElementById(prefix + '-attrs-' + jid).innerHTML = renderSlidersPosVoto(j, prefix, pos);
+  if (prefix === 'vote') actualizarVotoPreview(jid);
+}
+
+// Lee lo votado para un jugador: { pos, posVals, genVals, promedio } o null.
+function leerVotoJugador(prefix, jid) {
+  const row = document.getElementById(prefix + '-pos-' + jid);
+  if (!row) return null;
+  const pos = row.dataset.pos;
+  const leer = (lista, out) => lista.forEach(a => {
+    const el = document.getElementById(prefix + '-' + jid + '-' + a.key);
+    if (el) out[a.key] = parseFloat(el.value);
+  });
+  const posVals = {}, genVals = {};
+  leer(POS_CONFIG[pos].attrs, posVals);
+  leer(ATTRS_GENERALES, genVals);
+  return { pos, posVals, genVals, promedio: promedioVoto(Object.values(posVals), Object.values(genVals)) };
 }
 
 // ===================== HISTORIAL =====================
@@ -568,7 +626,7 @@ function renderHistorial() {
         <button class="btn btn-secondary" style="flex:1;justify-content:center;font-size:11px"
           onclick="abrirEditarResultado('${p.id}')">✏️ Editar resultado</button>
         <button class="btn btn-secondary" style="flex:1;justify-content:center;font-size:11px"
-          onclick="abrirEditarJugadoresPartido('${p.id}')">👥 Editar jugadores</button>
+          onclick="abrirEditarJugadoresPartido('${p.id}')">👥 Jugadores y posiciones</button>
         ${puedeUndo ? `<button class="undo-btn" style="align-self:center" onclick="deshacerPartido('${p.id}')">↩ Deshacer</button>` : ''}
       </div>` : '';
 
@@ -620,12 +678,11 @@ let editandoId = null;
 function abrirEditar(id) {
   const j = getJugador(id); if (!j) return;
   editandoId = id;
-  const pos = j.pos || 'MED';
-  const cfg = POS_CONFIG[pos];
   document.getElementById('modal-nombre').textContent = `✏️ ${j.nombre}`;
+  iniciarEditorPos(j, 'editor-pos-admin', renderEditAttrsPos);
 
   let html = `
-    <div style="margin-bottom:12px">${posBadge(pos)}</div>
+    <div id="editor-pos-admin" style="margin-bottom:14px"></div>
     <div class="rating-row" style="margin-bottom:4px">
       <span class="rating-label">Rating general</span>
       <input type="range" id="edit-rating" min="1" max="10" step="0.5" value="${j.rating.toFixed(1)}"
@@ -633,17 +690,8 @@ function abrirEditar(id) {
       <span class="rating-val" id="edit-rating-val">${j.rating.toFixed(1)}</span>
     </div>
     <hr style="margin:14px 0">
-    <div style="font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;color:var(--muted);margin-bottom:10px">ATRIBUTOS</div>`;
-
-  cfg.attrs.forEach(a => {
-    const val = (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
-    html += `<div class="attr-edit-row">
-      <span class="attr-edit-label">${a.label}</span>
-      <input type="range" id="edit-attr-${a.key}" min="1" max="10" step="0.5" value="${val.toFixed(1)}"
-        oninput="document.getElementById('ev-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
-      <span class="attr-edit-val" id="ev-${a.key}">${val.toFixed(1)}</span>
-    </div>`;
-  });
+    <div style="font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;color:var(--muted);margin-bottom:10px">ATRIBUTOS</div>
+    <div id="edit-attrs-pos"></div>`;
 
   // Atributos generales
   html += `<hr style="margin:14px 0">
@@ -662,7 +710,85 @@ function abrirEditar(id) {
   });
 
   document.getElementById('modal-contenido').innerHTML = html;
+  refrescarEditorPos();
   document.getElementById('modal-editar').classList.add('open');
+}
+
+// Sliders de atributos de las posiciones marcadas en el editor. Conserva lo
+// que ya se movió cuando se agrega o se saca una posición.
+function renderEditAttrsPos() {
+  const j    = getJugador(editandoId);
+  const cont = document.getElementById('edit-attrs-pos');
+  if (!j || !cont) return;
+  const prev = {};
+  cont.querySelectorAll('input[type=range]').forEach(el => { prev[el.id] = parseFloat(el.value); });
+  cont.innerHTML = posicionesDe({ pos: _editorPos.pos, posiciones: _editorPos.sec }).map(p =>
+    `<div class="voto-subtitulo">${POS_CONFIG[p].icon} ${POS_CONFIG[p].label}</div>` +
+    POS_CONFIG[p].attrs.map(a => {
+      const id  = 'edit-attr-' + a.key;
+      const val = prev[id] != null ? prev[id]
+        : (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating;
+      return `<div class="attr-edit-row">
+        <span class="attr-edit-label">${a.label}</span>
+        <input type="range" id="${id}" min="1" max="10" step="0.5" value="${val.toFixed(1)}"
+          oninput="document.getElementById('ev-${a.key}').textContent=parseFloat(this.value).toFixed(1)">
+        <span class="attr-edit-val" id="ev-${a.key}">${val.toFixed(1)}</span>
+      </div>`;
+    }).join('')
+  ).join('');
+}
+
+// ===================== EDITOR DE POSICIONES =====================
+// Lo usan el admin (modal editar) y el propio jugador (Mis posiciones).
+
+let _editorPos = null;   // { pos, sec, contenedor, onChange }
+
+function iniciarEditorPos(j, contenedor, onChange) {
+  const pos = j.pos || 'MED';
+  _editorPos = { pos, sec: (j.posiciones || []).filter(p => p !== pos), contenedor, onChange };
+}
+
+function refrescarEditorPos() {
+  const { pos, sec, contenedor, onChange } = _editorPos;
+  const el = document.getElementById(contenedor); if (!el) return;
+  el.innerHTML = `
+    <label style="margin-top:0">Posición principal</label>
+    <div class="editor-pos-grid">${POS_ORDER.map(p => `
+      <div class="pos-btn ${p === pos ? 'selected-' + p : ''}" onclick="editorSetPrincipal('${p}')">
+        <span class="pos-icon">${POS_CONFIG[p].icon}</span><span class="pos-name">${POS_CONFIG[p].label}</span>
+      </div>`).join('')}
+    </div>
+    <label>También juega de</label>
+    <div class="editor-pos-sec">${POS_ORDER.filter(p => p !== pos).map(p => `
+      <button type="button" class="pos-chip suele ${sec.includes(p) ? 'sel-' + p : ''}" onclick="editorToggleSec('${p}')">
+        ${POS_CONFIG[p].icon} ${POS_CONFIG[p].label}
+      </button>`).join('')}
+    </div>`;
+  if (onChange) onChange();
+}
+
+function editorSetPrincipal(p) {
+  _editorPos.pos = p;
+  _editorPos.sec = _editorPos.sec.filter(x => x !== p);
+  refrescarEditorPos();
+}
+
+function editorToggleSec(p) {
+  if (p === _editorPos.pos) return;
+  const s = _editorPos.sec;
+  _editorPos.sec = s.includes(p) ? s.filter(x => x !== p) : [...s, p];
+  refrescarEditorPos();
+}
+
+function abrirMisPosiciones() {
+  const j = getJugadorDelUsuarioActual(); if (!j) return;
+  iniciarEditorPos(j, 'editor-pos-propio', null);
+  refrescarEditorPos();
+  document.getElementById('modal-posiciones').classList.add('open');
+}
+
+function cerrarMisPosiciones() {
+  document.getElementById('modal-posiciones').classList.remove('open');
 }
 
 function cerrarModal() {

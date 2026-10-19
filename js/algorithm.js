@@ -27,8 +27,26 @@
 //
 // Complejidad: O(n log n + SA_ITERATIONS) — instantáneo hasta ~50 jugadores.
 
+// Si hay menos de 2 arqueros de posición principal, completa con quienes
+// tienen ARQ como secundaria (el mejor en atributos de arquero primero).
+// Se los trata como ARQ solo para este partido: copias con pos = 'ARQ'.
+function completarArqueros(convocados) {
+  const faltan = 2 - convocados.filter(j => j.pos === 'ARQ').length;
+  if (faltan <= 0) return convocados;
+  const promArq = j => {
+    const ks = POS_CONFIG.ARQ.attrs.map(a => (j.attrs && j.attrs[a.key] != null) ? j.attrs[a.key] : j.rating);
+    return ks.reduce((s, x) => s + x, 0) / ks.length;
+  };
+  const suplentes = convocados
+    .filter(j => j.pos !== 'ARQ' && (j.posiciones || []).includes('ARQ'))
+    .sort((a, b) => promArq(b) - promArq(a))
+    .slice(0, faltan)
+    .map(j => j.id);
+  return convocados.map(j => suplentes.includes(j.id) ? { ...j, pos: 'ARQ' } : j);
+}
+
 function generarEquipos() {
-  const convocados = state.jugadores.filter(j => state.convocados.includes(j.id));
+  const convocados = completarArqueros(state.jugadores.filter(j => state.convocados.includes(j.id)));
 
   if (convocados.length < 2) {
     document.getElementById('equipos-output').innerHTML =
