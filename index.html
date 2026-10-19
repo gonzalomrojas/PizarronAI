@@ -374,6 +374,7 @@
     <div class="section-title">Convocar</div>
     <div id="warn-arq" class="warn-banner">⚠️ Seleccioná al menos 2 arqueros para armar equipos balanceados.</div>
     <div class="alert alert-yellow">Tildá los que juegan hoy.</div>
+    <button class="btn btn-secondary btn-full" onclick="abrirPegarLista()" style="margin:0 0 12px">📋 Pegar lista de WhatsApp</button>
     <div id="lista-convocados"></div>
     <div id="float-convocados" class="float-bar" style="display:none">
       <div class="float-count">Convocados: <span id="count-convocados">0</span></div>
@@ -545,6 +546,29 @@
     <button class="btn btn-primary btn-full" id="btn-guardar-manual" onclick="guardarPartidoManual()" style="margin-top:14px">
       💾 Guardar partido
     </button>
+  </div>
+</div>
+
+<!-- MODAL: PEGAR LISTA DE WHATSAPP -->
+<div class="modal-overlay" id="modal-pegar-lista">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarPegarLista()">✕</button>
+    <div class="modal-title">📋 Pegar lista de WhatsApp</div>
+
+    <div id="pegar-paso-texto">
+      <div class="modal-sub">Copiá el mensaje del grupo y pegalo tal cual. Los números, emojis y el título se ignoran.</div>
+      <textarea id="pegar-lista-texto" class="pegar-textarea" rows="10" placeholder="Fútbol domingo 19hs:&#10;1 Gonza&#10;2 Mauro&#10;3 Blas"></textarea>
+      <button class="btn btn-primary btn-full" onclick="procesarListaPegada()" style="margin-top:14px">Revisar lista →</button>
+    </div>
+
+    <div id="pegar-paso-revision" style="display:none">
+      <div class="modal-sub">Revisá cómo se asoció cada nombre. Al confirmar, reemplaza a los convocados actuales.</div>
+      <div id="pegar-revision"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn btn-secondary flex-1" style="justify-content:center" onclick="volverPegarLista()">← Volver</button>
+        <button class="btn btn-primary flex-1" style="justify-content:center" id="btn-confirmar-lista" onclick="confirmarListaPegada()">Confirmar</button>
+      </div>
+    </div>
   </div>
 </div>
 

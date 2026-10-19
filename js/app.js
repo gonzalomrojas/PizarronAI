@@ -499,6 +499,160 @@ function toggleConvocado(id) {
   saveState(); renderPartido();
 }
 
+// ===================== PEGAR LISTA DE WHATSAPP =====================
+// Convoca a partir del mensaje del grupo ("1 Gonza / 2 Mauro / ...").
+// Cada línea se asocia a un jugador por nombre; las que no coinciden
+// exacto se muestran para revisar antes de reemplazar los convocados.
+
+function normalizarNombre(s) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function escaparHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Devuelve los nombres de la lista, sin título, numeración ni el prefijo
+// "[12:57, 19/10/2026] Gonza: " que agrega WhatsApp al copiar varios mensajes.
+function extraerNombresLista(texto) {
+  return texto.split('\n')
+    .map(l => l.replace(/^\s*\[[^\]]*\]\s*[^:]{1,40}:\s*/, '').trim())
+    .filter(l => l && !l.endsWith(':'))
+    .map(l => l.replace(/^\d+\s*[.)\-:]*\s*/, '').trim())
+    .filter(l => normalizarNombre(l));
+}
+
+function prefijoComun(a, b) {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+function distanciaEdicion(a, b) {
+  const prev = Array.from({length: b.length + 1}, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0]; prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j-1] + 1, diag + (a[i-1] === b[j-1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+
+// Jugadores que podrían ser `nombre`: primero los exactos, después los parecidos.
+function candidatosPara(nombre) {
+  const n  = normalizarNombre(nombre);
+  const n1 = n.split(' ')[0];
+  const exactos = [], parecidos = [], porPrefijo = [];
+  state.jugadores.forEach(j => {
+    const pn = normalizarNombre(j.nombre);
+    if (pn.startsWith(n)) porPrefijo.push(j);
+    if (pn === n) { exactos.push(j); return; }
+    const p1 = pn.split(' ')[0];
+    const corto = Math.min(n.length, pn.length);
+    const lev   = distanciaEdicion(n, pn);
+    const parecido =
+      (corto >= 3 && (pn.startsWith(n) || n.startsWith(pn))) ||
+      p1 === n1 ||
+      prefijoComun(n1, p1) >= 4 ||
+      (corto >= 4 && lev <= 1) || (corto >= 7 && lev <= 2);
+    if (parecido) parecidos.push({ j, score: prefijoComun(n, pn) * 10 - lev });
+  });
+  parecidos.sort((a, b) => b.score - a.score);
+  // "Gonza" con un único jugador que empieza así ("Gonza R") cuenta como seguro.
+  const unico = !exactos.length && n.length >= 3 && porPrefijo.length === 1 ? porPrefijo[0] : null;
+  return { exactos, parecidos: parecidos.map(p => p.j), unico };
+}
+
+let _listaPegada = [];
+
+function abrirPegarLista() {
+  if (!state.jugadores.length) { alert('Primero agregá jugadores.'); return; }
+  document.getElementById('pegar-lista-texto').value = '';
+  volverPegarLista();
+  document.getElementById('modal-pegar-lista').classList.add('open');
+  document.getElementById('pegar-lista-texto').focus();
+}
+
+function cerrarPegarLista() {
+  document.getElementById('modal-pegar-lista').classList.remove('open');
+}
+
+function volverPegarLista() {
+  document.getElementById('pegar-paso-texto').style.display    = '';
+  document.getElementById('pegar-paso-revision').style.display = 'none';
+}
+
+function procesarListaPegada() {
+  const nombres = extraerNombresLista(document.getElementById('pegar-lista-texto').value);
+  if (!nombres.length) { alert('No encontré nombres en el texto pegado.'); return; }
+
+  // Un jugador no puede quedar asociado a dos líneas: si "Santi" aparece dos
+  // veces y hay un solo Santi, la segunda línea queda para revisar.
+  const usados = new Set();
+  _listaPegada = nombres.map(original => {
+    const { exactos, parecidos, unico } = candidatosPara(original);
+    const elegido = [...exactos, ...parecidos].find(j => !usados.has(j.id));
+    let estado;
+    if (elegido && (elegido === unico || (exactos.length === 1 && elegido === exactos[0]))) estado = 'ok';
+    else if (elegido || exactos.length || parecidos.length)        estado = 'dudoso';
+    else                                                           estado = 'nuevo';
+    if (elegido) usados.add(elegido.id);
+    return { original, id: elegido ? elegido.id : '', estado };
+  });
+
+  renderRevisionLista();
+  document.getElementById('pegar-paso-texto').style.display    = 'none';
+  document.getElementById('pegar-paso-revision').style.display = '';
+}
+
+function renderRevisionLista() {
+  const ordenados = [...state.jugadores].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const grupos = [
+    ['ok',     '✅ Encontrados'],
+    ['dudoso', '⚠️ Revisar — nombre parecido o repetido'],
+    ['nuevo',  '❌ No encontrados — elegí el jugador o salteálo'],
+  ];
+  let html = '';
+  grupos.forEach(([estado, titulo]) => {
+    const filas = _listaPegada.map((f, i) => ({ f, i })).filter(x => x.f.estado === estado);
+    if (!filas.length) return;
+    html += `<div class="pegar-grupo">${titulo} (${filas.length})</div>`;
+    filas.forEach(({ f, i }) => {
+      const opts = ordenados.map(j =>
+        `<option value="${j.id}" ${j.id === f.id ? 'selected' : ''}>${escaparHtml(j.nombre)}</option>`
+      ).join('');
+      html += `<div class="pegar-fila">
+        <div class="pegar-original" title="${escaparHtml(f.original)}">${escaparHtml(f.original)}</div>
+        <select onchange="_listaPegada[${i}].id = this.value; actualizarResumenLista()">
+          <option value="" ${f.id ? '' : 'selected'}>— Saltear —</option>${opts}
+        </select>
+      </div>`;
+    });
+  });
+  html += '<div class="pegar-resumen" id="pegar-resumen"></div>';
+  document.getElementById('pegar-revision').innerHTML = html;
+  actualizarResumenLista();
+}
+
+function actualizarResumenLista() {
+  const ids  = _listaPegada.map(f => f.id).filter(Boolean);
+  const unicos = new Set(ids);
+  const repetidos = ids.length - unicos.size;
+  document.getElementById('pegar-resumen').textContent =
+    `${unicos.size} convocados` + (repetidos ? ` · ⚠️ ${repetidos} jugador(es) elegido(s) en más de una línea` : '');
+  document.getElementById('btn-confirmar-lista').textContent = `Confirmar (${unicos.size})`;
+}
+
+function confirmarListaPegada() {
+  state.convocados = [...new Set(_listaPegada.map(f => f.id).filter(Boolean))];
+  saveState(); renderPartido();
+  cerrarPegarLista();
+}
+
 async function guardarPartido() {
   if (!esAdmin()) { alert('Solo el admin puede guardar partidos.'); return; }
   if (!state.equipoA.length) { alert('Primero generá los equipos.'); return; }
@@ -1270,6 +1424,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('modal-partido-manual').addEventListener('click', function(e) {
     if (e.target === this) cerrarModalManual();
+  });
+  document.getElementById('modal-pegar-lista').addEventListener('click', function(e) {
+    if (e.target === this) cerrarPegarLista();
   });
   document.getElementById('modal-stats').addEventListener('click', function(e) {
     if (e.target === this) cerrarStats();
